@@ -1,6 +1,7 @@
 import React from 'react';
-import { createRoot } from 'react-dom/client';
-import App from './pages/App';
+import ReactDOM from 'react-dom/client';
+import { App } from './components/App';
+import './tailwind.css';
 
 // Add this code to dynamically inject the Tailwind CDN script
 const injectTailwindCDN = () => {
@@ -12,8 +13,8 @@ const injectTailwindCDN = () => {
 // Call the function to inject the script
 injectTailwindCDN();
 
-const container = document.getElementById('root');
-if (container) {
-  const root = createRoot(container);
-  root.render(<App />);
-}
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
