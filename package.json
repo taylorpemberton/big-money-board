@@ -9,7 +9,7 @@
     "server": "ts-node server/index.ts",
     "dev": "vite",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist",
+    "deploy": "npm run build && git add dist && git commit -m 'Deploy to main' && git subtree push --prefix dist origin main",
     "build:css": "node ./node_modules/.bin/tailwindcss -i ./src/tailwind.css -o ./src/styles/output.css",
     "watch:css": "node ./node_modules/.bin/tailwindcss -i ./src/tailwind.css -o ./src/styles/output.css --watch"
   },
