@@ -30,7 +30,7 @@ function App() {
   const DELAY = 5000;
 
   const [playSuccess] = useSound('/sounds/success.mp3', { volume });
-  const [playFailure] = useSound('/sounds/failure.mp3', { volume });
+  const [playFailure] = useSound('/sounds/oh-brother.mp3', { volume });
   const [playGeneric] = useSound('/sounds/generic.mp3', { volume });
 
   useEffect(() => {
@@ -39,22 +39,19 @@ function App() {
       setEvents((prev) => {
         const newEvent = sampleEvents[currentIndex];
         
-        if (newEvent.status === 'succeeded') {
-          playSuccess();
-        } else if (newEvent.status === 'failed') {
+        if (newEvent.details.toLowerCase().includes('failed')) {
           playFailure();
-        } else {
+        } else if (newEvent.details.toLowerCase().includes('new customer')) {
           playGeneric();
+        } else {
+          playSuccess();
         }
         
         return [newEvent, ...prev].slice(0, 10);
       });
       setTimeLeft(8);
-      
-      // Trigger flash animation
       setIsFlashing(true);
       setTimeout(() => setIsFlashing(false), 5000);
-      
     }, DELAY);
 
     const timer = setInterval(() => {
@@ -114,52 +111,33 @@ function App() {
     }).format(amount);
   };
 
-  // Define the background color based on status
+  // Simplified color logic
   const getBackgroundColor = (event?: Event) => {
     if (!event) return 'bg-blue-50';
     
-    // Check for failure keywords
-    if (event.status === 'failed' || 
-        event.details.toLowerCase().includes('failed') ||
-        event.details.toLowerCase().includes('declined')) {
+    if (event.details.toLowerCase().includes('failed')) {
       return 'bg-red-50';
     }
     
-    // Check for positive money events
-    if ((event.amount && event.amount > 0) || 
-        event.details.toLowerCase().includes('charged')) {
-      return 'bg-green-50';
+    if (event.details.toLowerCase().includes('new customer')) {
+      return 'bg-blue-50';
     }
     
-    // Customer signups are always blue
-    if (event.type === 'signup') return 'bg-blue-50';
-    
-    // Default to blue
-    return 'bg-blue-50';
+    return 'bg-green-50';
   };
 
-  // Define the text color based on status
   const getTextColor = (event?: Event) => {
     if (!event) return 'text-blue-800';
     
-    // Check for failure keywords
-    if (event.status === 'failed' || 
-        event.details.toLowerCase().includes('failed') ||
-        event.details.toLowerCase().includes('declined')) {
+    if (event.details.toLowerCase().includes('failed')) {
       return 'text-red-800';
     }
     
-    // Check for positive money events
-    if ((event.amount && event.amount > 0) || 
-        event.details.toLowerCase().includes('charged')) {
-      return 'text-green-800';
+    if (event.details.toLowerCase().includes('new customer')) {
+      return 'text-blue-800';
     }
     
-    // Customer signups are always blue
-    if (event.type === 'signup') return 'text-blue-800';
-    
-    // Default to blue
-    return 'text-blue-800';
+    return 'text-green-800';
   };
 
   // Add currency to country mapping
@@ -221,12 +199,9 @@ function App() {
                 <h1 className="text-2xl font-bold mb-4 text-center">Big Money Board</h1>
                 
                 <div className={`w-[580px] h-[380px] rounded-3xl border-4 relative overflow-hidden ${
-                  events[0]?.type === 'signup' ? 'border-blue-400' : 
-                  (events[0]?.amount && events[0].amount > 0) || 
-                  (events[0]?.details.toLowerCase().includes('charged')) ? 'border-green-400' : 
-                  events[0]?.status === 'failed' || 
-                  events[0]?.details.toLowerCase().includes('failed') ||
-                  events[0]?.details.toLowerCase().includes('declined') ? 'border-red-400' : 'border-blue-400'
+                  events[0]?.details.toLowerCase().includes('failed') ? 'border-red-400' : 
+                  events[0]?.details.toLowerCase().includes('new customer') ? 'border-blue-400' : 
+                  'border-green-400'
                 }`}>
                   {events[0] && (
                     <div
@@ -295,16 +270,16 @@ function App() {
                 @keyframes splash {
                   0% { 
                     background-color: ${
-                      events[0]?.type === 'signup' ? '#60a5fa' : 
-                      (events[0]?.amount && events[0].amount > 0) ? '#4ade80' : 
-                      events[0]?.status === 'failed' ? '#f87171' : '#60a5fa'
+                      events[0]?.details.toLowerCase().includes('failed') ? '#f87171' : 
+                      events[0]?.details.toLowerCase().includes('new customer') ? '#60a5fa' : 
+                      '#4ade80'
                     }; 
                   }
                   10% { 
                     background-color: ${
-                      events[0]?.type === 'signup' ? '#60a5fa' : 
-                      (events[0]?.amount && events[0].amount > 0) ? '#4ade80' : 
-                      events[0]?.status === 'failed' ? '#f87171' : '#60a5fa'
+                      events[0]?.details.toLowerCase().includes('failed') ? '#f87171' : 
+                      events[0]?.details.toLowerCase().includes('new customer') ? '#60a5fa' : 
+                      '#4ade80'
                     }; 
                   }
                   100% { background-color: white; }

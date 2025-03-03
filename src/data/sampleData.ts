@@ -51,12 +51,12 @@ const getCountryFlag = (currency: string) => {
 export const sampleEvents: SampleEvent[] = [
     {
       type: 'charge',
-      status: getRandomStatus(),
+      status: 'failed',
       amount: 4.20,
       currency: 'USD',
       countryFlag: getCountryFlag('USD'),
       timestamp: '2023-07-20T08:28:00Z',
-      details: 'Application Fee charged'
+      details: 'Application Fee failed'
     },
     {
       type: 'charge',
@@ -78,12 +78,12 @@ export const sampleEvents: SampleEvent[] = [
     },
     {
       type: 'charge',
-      status: getRandomStatus(),
+      status: 'failed',
       amount: 110.00,
       currency: 'USD',
       countryFlag: getCountryFlag('USD'),
       timestamp: '2023-07-20T09:11:00Z',
-      details: 'Invoice charge succeeded'
+      details: 'Invoice charge failed'
     },
     {
       type: 'charge',
@@ -105,12 +105,12 @@ export const sampleEvents: SampleEvent[] = [
     },
     {
       type: 'charge',
-      status: getRandomStatus(),
+      status: 'failed',
       amount: 1.32,
       currency: 'USD',
       countryFlag: getCountryFlag('USD'),
       timestamp: '2023-07-20T09:37:00Z',
-      details: 'Application Fee charged'
+      details: 'Application Fee failed'
     },
     {
       type: 'charge',
@@ -203,7 +203,7 @@ export const sampleEvents: SampleEvent[] = [
     {
       type: 'charge',
       status: getRandomStatus(),
-      amount: 4.20,
+      amount: 4.21,
       currency: 'USD',
       countryFlag: getCountryFlag('USD'),
       timestamp: '2023-07-20T11:19:00Z',
@@ -212,7 +212,7 @@ export const sampleEvents: SampleEvent[] = [
     {
       type: 'charge',
       status: getRandomStatus(),
-      amount: 4.20,
+      amount: 4.02,
       currency: 'USD',
       countryFlag: getCountryFlag('USD'),
       timestamp: '2023-07-20T11:22:00Z',
@@ -345,6 +345,69 @@ export const sampleEvents: SampleEvent[] = [
       quantity: 1,
       timestamp: '2023-07-20T12:48:00Z',
       details: 'New subscription'
+    },
+    {
+      type: 'charge',
+      status: 'failed',
+      amount: 29.99,
+      currency: 'USD',
+      countryFlag: getCountryFlag('USD'),
+      timestamp: '2023-07-20T13:15:00Z',
+      details: 'Subscription charge failed'
+    },
+    {
+      type: 'charge',
+      status: 'failed',
+      amount: 49.99,
+      currency: 'USD',
+      countryFlag: getCountryFlag('USD'),
+      timestamp: '2023-07-20T13:45:00Z',
+      details: 'Monthly plan charge failed'
+    },
+    {
+      type: 'charge',
+      status: 'failed',
+      amount: 9.99,
+      currency: 'USD',
+      countryFlag: getCountryFlag('USD'),
+      timestamp: '2023-07-20T14:00:00Z',
+      details: 'Add-on charge failed'
+    },
+    {
+      type: 'charge',
+      status: 'failed',
+      amount: 199.99,
+      currency: 'USD',
+      countryFlag: getCountryFlag('USD'),
+      timestamp: '2023-07-20T14:30:00Z',
+      details: 'Enterprise plan charge failed'
+    },
+    {
+      type: 'charge',
+      status: 'failed',
+      amount: 14.99,
+      currency: 'USD',
+      countryFlag: getCountryFlag('USD'),
+      timestamp: '2023-07-20T15:00:00Z',
+      details: 'Trial conversion charge failed'
+    },
+    {
+      type: 'charge',
+      status: 'failed',
+      amount: 99.99,
+      currency: 'USD',
+      countryFlag: getCountryFlag('USD'),
+      timestamp: '2023-07-20T15:30:00Z',
+      details: 'Annual subscription charge failed'
+    },
+    {
+      type: 'charge',
+      status: 'failed',
+      amount: 4.99,
+      currency: 'USD',
+      countryFlag: getCountryFlag('USD'),
+      timestamp: '2023-07-20T16:00:00Z',
+      details: 'Microtransaction charge failed'
     },
 ].map(event => {
   if (event.type === 'charge') {
