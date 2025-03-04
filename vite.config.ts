@@ -3,12 +3,16 @@ import react from '@vitejs/plugin-react';
 import viteCompression from 'vite-plugin-compression';
 
 export default defineConfig({
-  base: '/big-money-board/',
+  base: '/',
   plugins: [
     react(),
     viteCompression({
       algorithm: 'gzip',
       ext: '.gz',
+      threshold: 10240, // Only compress files larger than 10kb
+      deleteOriginFile: false, // Keep the original files
+      verbose: true, // Log compression results
+      filter: (file) => /\.(js|css|html|svg)$/i.test(file), // Only compress certain file types
     }),
   ],
   server: {
@@ -24,9 +28,21 @@ export default defineConfig({
         manualChunks: {
           react: ['react', 'react-dom'],
         },
+        // Ensure proper formatting of JavaScript files
+        format: 'es',
       },
     },
     assetsDir: 'assets', // Ensure assets are in the correct directory
+    // Ensure proper handling of JavaScript files
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+      },
+      format: {
+        comments: false,
+      },
+    },
   },
   css: {
     postcss: './postcss.config.js', // Point to the updated PostCSS config

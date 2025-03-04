@@ -5,11 +5,12 @@ import useSound from 'use-sound';
 import { VolumeControl } from './VolumeControl';
 import { Event } from '../types/Event';
 import supersetLogo from '../assets/superset-logo.svg';
-import { FaPause, FaPlay } from 'react-icons/fa';
+import { FaPause, FaPlay, FaVolumeUp } from 'react-icons/fa';
 import { getEventColors } from '../utils/eventStyles';
 import { formatCurrency } from '../utils/formatting';
 import { currencyToCountry, getFlagEmoji } from '../utils/flags';
 import { getSplashAnimation } from '../utils/animations';
+import { fetchEvents } from '../api/stripeApi';
 
 const USD_CONVERSION_RATES: Record<string, number> = {
   EUR: 1.08,
@@ -22,9 +23,6 @@ const USD_CONVERSION_RATES: Record<string, number> = {
 
 export const Events = () => {
   const [events, setEvents] = useState<Event[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(8);
-  const [isFlashing, setIsFlashing] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [showInternationalOnly, setShowInternationalOnly] = useState(false);
   const [lastEventWasFailed, setLastEventWasFailed] = useState(false);
@@ -43,24 +41,48 @@ export const Events = () => {
     const savedSydneyMuted = localStorage.getItem('isSydneyMuted');
     return savedSydneyMuted ? JSON.parse(savedSydneyMuted) : false;
   });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isFlashing, setIsFlashing] = useState(false);
+  const [audioContextInitialized, setAudioContextInitialized] = useState(false);
   
-  const DELAY = 5000;
-
-  const [playSuccess] = useSound('/big-money-board/sounds/success.mp3', { 
+  const [playSuccess] = useSound('/sounds/success.mp3', { 
     volume: isMuted ? 0 : volume,
-    interrupt: true 
+    interrupt: true
   });
-  const [playFailure] = useSound('/big-money-board/sounds/oh-brother.mp3', { 
+  const [playFailure] = useSound('/sounds/oh-brother.mp3', { 
     volume: isSydneyMuted ? 0 : volume,
-    interrupt: true 
+    interrupt: true
   });
-  const [playGeneric] = useSound('/big-money-board/sounds/generic.mp3', { 
+  const [playGeneric] = useSound('/sounds/success.mp3', { 
     volume: isMuted ? 0 : volume,
-    interrupt: true 
+    interrupt: true
   });
 
   const amountRef = useRef<HTMLSpanElement>(null);
   const [amountFontSize, setAmountFontSize] = useState('text-7xl sm:text-[120px]');
+
+  // Add a direct sound playing function as a fallback
+  const playSound = (type: 'success' | 'failure' | 'generic') => {
+    console.log(`Attempting to play ${type} sound directly`);
+    try {
+      const audio = new Audio(`/sounds/${type === 'success' ? 'success.mp3' : type === 'failure' ? 'oh-brother.mp3' : 'success.mp3'}`);
+      audio.volume = type === 'failure' ? (isSydneyMuted ? 0 : volume) : (isMuted ? 0 : volume);
+      audio.play().catch(e => console.error('Error playing sound:', e));
+    } catch (e) {
+      console.error('Error creating Audio object:', e);
+    }
+  };
+
+  // Handle international toggle
+  const handleInternationalToggle = () => {
+    setShowInternationalOnly(!showInternationalOnly);
+  };
+
+  // Filter events based on international toggle
+  const filteredEvents = showInternationalOnly 
+    ? events.filter(event => event.type === 'charge' && event.currency !== 'USD')
+    : events;
 
   // Save volume and mute states to localStorage
   useEffect(() => {
@@ -75,23 +97,130 @@ export const Events = () => {
     localStorage.setItem('isSydneyMuted', JSON.stringify(isSydneyMuted));
   }, [isSydneyMuted]);
 
-  // Add initial event when component mounts
+  // Load real events from Stripe
   useEffect(() => {
-    // Create a standalone fake success event
-    const initialEvent: Event = {
-      type: 'charge',
-      status: 'succeeded',
-      amount: 42.99,
-      currency: 'USD',
-      country: 'US',
-      timestamp: new Date().toISOString(),
-      details: 'Application Fee charged',
-      email: 'customer@example.com'
+    // Function to load real events
+    const loadRealEvents = async () => {
+      try {
+        setIsLoading(true);
+        const realEvents = await fetchEvents();
+        
+        if (realEvents && realEvents.length > 0) {
+          // Get the latest event for sound playing
+          const latestEvent = realEvents[0];
+          
+          // Check if we have new events by comparing with current events
+          const isNewEvent = events.length === 0 || 
+            realEvents[0].timestamp !== events[0]?.timestamp ||
+            realEvents[0].details !== events[0]?.details;
+          
+          // Always play sound for the latest event if it's new
+          if (isNewEvent) {
+            // Play sound based on event type - do this before updating state
+            if (latestEvent.details.toLowerCase().includes('failed')) {
+              console.log('Playing failure sound for event:', latestEvent.details);
+              setLastEventWasFailed(true);
+              playFailure();
+              // Also try direct sound playing as fallback
+              playSound('failure');
+            } else if (latestEvent.details.toLowerCase().includes('new customer')) {
+              console.log('Playing generic sound for event:', latestEvent.details);
+              setLastEventWasFailed(false);
+              playGeneric();
+              // Also try direct sound playing as fallback
+              playSound('generic');
+            } else {
+              console.log('Playing success sound for event:', latestEvent.details);
+              setLastEventWasFailed(false);
+              playSuccess();
+              // Also try direct sound playing as fallback
+              playSound('success');
+            }
+            
+            // Update the UI with new events
+            setEvents(realEvents);
+            
+            // Update daily revenue if this is a successful charge
+            if (latestEvent.type === 'charge' && latestEvent.status === 'succeeded' && latestEvent.amount) {
+              const amountInUSD = latestEvent.currency && latestEvent.currency !== 'USD' 
+                ? latestEvent.amount * (USD_CONVERSION_RATES[latestEvent.currency] || 1) 
+                : latestEvent.amount;
+              
+              setDailyRevenue(prev => prev + amountInUSD);
+            }
+            
+            // Flash effect for new events
+            setIsFlashing(true);
+            setTimeout(() => setIsFlashing(false), 1000);
+          }
+        }
+        
+        setError(null);
+      } catch (err) {
+        console.error('Failed to load events:', err);
+        setError('Failed to load events from Stripe');
+      } finally {
+        setIsLoading(false);
+      }
     };
     
-    setEvents([initialEvent]);
-    playSuccess();
-  }, [playSuccess]);
+    // Load events immediately
+    loadRealEvents();
+    
+    // Set up a very infrequent polling as a fallback (every 60 seconds)
+    // This is just to ensure we don't miss events if the server doesn't notify us
+    const intervalId = setInterval(() => {
+      if (!isPaused) {
+        loadRealEvents();
+      }
+    }, 60000); // 60 seconds instead of 30 seconds
+    
+    // Set up event source for server-sent events (if supported by the browser)
+    const checkForNewEvents = () => {
+      // Only check if not paused
+      if (!isPaused) {
+        // Add a timestamp to prevent caching
+        const timestamp = new Date().getTime();
+        fetch(`${window.location.origin}/api/events/check-new?lastTimestamp=${events[0]?.timestamp || ''}&_=${timestamp}`)
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`HTTP error ${response.status}`);
+            }
+            return response.text();
+          })
+          .then(text => {
+            // Check if the response is HTML instead of JSON
+            if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+              console.warn('Received HTML instead of JSON, skipping this check');
+              return { hasNewEvents: false };
+            }
+            
+            try {
+              return JSON.parse(text);
+            } catch (e) {
+              console.warn('Failed to parse JSON response:', text);
+              return { hasNewEvents: false };
+            }
+          })
+          .then(data => {
+            if (data.hasNewEvents) {
+              loadRealEvents();
+            }
+          })
+          .catch(err => {
+            console.error('Error checking for new events:', err);
+          });
+      }
+    };
+    
+    // Check for new events every 15 seconds (increased from 5 seconds)
+    const checkIntervalId = setInterval(checkForNewEvents, 15000);
+    
+    return () => {
+      clearInterval(intervalId);
+      clearInterval(checkIntervalId);
+    };
+  }, [playSuccess, playFailure, playGeneric, isPaused, events]);
 
   // Calculate daily revenue
   useEffect(() => {
@@ -123,90 +252,6 @@ export const Events = () => {
     
     setPreviousDailyRevenue(dailyRevenue);
   }, [dailyRevenue]);
-
-  useEffect(() => {
-    if (isPaused) return;
-
-    const interval = setInterval(() => {
-      setCurrentIndex((prev) => {
-        let nextIndex = (prev + 1) % sampleEvents.length;
-        const nextEvent = sampleEvents[nextIndex];
-        
-        // If last event was failed and next event is also failed, skip to next
-        if (lastEventWasFailed && nextEvent.details.toLowerCase().includes('failed')) {
-          nextIndex = (nextIndex + 1) % sampleEvents.length;
-        }
-        
-        return nextIndex;
-      });
-
-      setEvents((prev) => {
-        const newEvent = sampleEvents[currentIndex];
-        const isFailed = newEvent.details.toLowerCase().includes('failed');
-        setLastEventWasFailed(isFailed);
-        
-        // Update daily revenue if this is a successful charge
-        if (!isFailed && newEvent.type === 'charge' && newEvent.amount) {
-          const amountInUSD = newEvent.currency && newEvent.currency !== 'USD' 
-            ? newEvent.amount * (USD_CONVERSION_RATES[newEvent.currency] || 1) 
-            : newEvent.amount;
-          
-          setDailyRevenue(prev => prev + amountInUSD);
-        }
-        
-        if (isFailed) {
-          playFailure();
-        } else if (newEvent.details.toLowerCase().includes('new customer')) {
-          playGeneric();
-        } else {
-          playSuccess();
-        }
-        
-        return [newEvent, ...prev].slice(0, 10);
-      });
-      setTimeLeft(8);
-      setIsFlashing(true);
-      setTimeout(() => setIsFlashing(false), 5000);
-    }, DELAY);
-
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 8));
-    }, 1000);
-
-    return () => {
-      clearInterval(interval);
-      clearInterval(timer);
-    };
-  }, [currentIndex, playSuccess, playFailure, playGeneric, isPaused, lastEventWasFailed]);
-
-  // Filter events based on international toggle
-  const filteredEvents = showInternationalOnly 
-    ? events.filter(event => event.type === 'charge' && event.currency !== 'USD')
-    : events;
-
-  // Handle international toggle
-  const handleInternationalToggle = () => {
-    setShowInternationalOnly(!showInternationalOnly);
-    
-    // If toggling to international only and no international events exist
-    if (!showInternationalOnly && filteredEvents.length === 0) {
-      // Find first international event from sample data
-      const internationalEvent = sampleEvents.find(event => 
-        event.type === 'charge' && event.currency && event.currency !== 'USD'
-      );
-      
-      if (internationalEvent) {
-        setEvents([internationalEvent]);
-        if (internationalEvent.details.toLowerCase().includes('failed')) {
-          playFailure();
-        } else if (internationalEvent.details.toLowerCase().includes('new customer')) {
-          playGeneric();
-        } else {
-          playSuccess();
-        }
-      }
-    }
-  };
 
   // Function to adjust font size based on content width
   const adjustFontSize = () => {
@@ -258,15 +303,120 @@ export const Events = () => {
     };
   }, [filteredEvents[0]?.amount, filteredEvents[0]?.currency]);
 
+  // Auto-initialize audio context on component mount
+  useEffect(() => {
+    // Try to initialize audio context automatically
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (AudioContext) {
+      try {
+        // Create a new audio context
+        const audioCtx = new AudioContext();
+        
+        // Play a silent sound to unlock audio on iOS/Safari
+        const silentBuffer = audioCtx.createBuffer(1, 1, 22050);
+        const source = audioCtx.createBufferSource();
+        source.buffer = silentBuffer;
+        source.connect(audioCtx.destination);
+        source.start();
+        
+        // Also try to play each sound once with volume 0 to initialize them
+        const initSounds = async () => {
+          try {
+            // Create and play silent versions of all sounds
+            const sounds = [
+              new Audio('/sounds/success.mp3'),
+              new Audio('/sounds/oh-brother.mp3')
+            ];
+            
+            // Set volume to 0 and play each sound
+            sounds.forEach(sound => {
+              sound.volume = 0;
+              sound.play().catch(e => console.error('Error pre-loading sound:', e));
+            });
+            
+            // Set state to indicate audio is initialized
+            setAudioContextInitialized(true);
+            console.log('Audio context and sounds initialized automatically');
+          } catch (err) {
+            console.error('Error initializing sounds:', err);
+          }
+        };
+        
+        initSounds();
+      } catch (err) {
+        console.error('Failed to auto-initialize audio context:', err);
+      }
+    }
+  }, []);
+
+  // Enhanced event handling to ensure sounds play for all events
+  useEffect(() => {
+    if (events.length > 0 && !isPaused) {
+      // Get the most recent event
+      const latestEvent = events[0];
+      
+      // Determine which sound to play based on the event type
+      if (latestEvent.details.toLowerCase().includes('failed')) {
+        // Play failure sound for failed events
+        playFailure();
+        console.log('Playing failure sound for event:', latestEvent.details);
+      } else if (latestEvent.details.toLowerCase().includes('new customer')) {
+        // Play success sound for new customers
+        playSuccess();
+        console.log('Playing success sound for event:', latestEvent.details);
+      } else {
+        // Play generic sound for all other events
+        playGeneric();
+        console.log('Playing generic sound for event:', latestEvent.details);
+      }
+    }
+  }, [events.length, isPaused]); // Only re-run when events length changes or pause state changes
+
+  // Add loading and error states to your UI
+  if (isLoading && events.length === 0) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-white">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading events from Stripe...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (error && events.length === 0) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-white">
+        <div className="text-center">
+          <div className="text-red-500 text-5xl mb-4">⚠️</div>
+          <p className="text-gray-800 text-xl mb-2">Error Loading Data</p>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Also add a check for empty events array
+  if (events.length === 0) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-white">
+        <div className="text-center">
+          <div className="text-yellow-500 text-5xl mb-4">⏳</div>
+          <p className="text-gray-800 text-xl mb-2">Waiting for Stripe Events</p>
+          <p className="text-gray-600 mb-4">No events have been received yet. Send a test webhook from the Stripe Dashboard.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div 
-      className="h-screen w-screen overflow-hidden bg-white transition-colors duration-500"
-      style={{
-        animation: isFlashing 
-          ? 'splash 1s ease-out' 
-          : 'none'
-      }}
-    >
+    <div className={`min-h-screen bg-white ${isFlashing ? 'animate-flash' : ''}`}>
       {/* International Toggle */}
       <button
         onClick={handleInternationalToggle}
@@ -288,7 +438,8 @@ export const Events = () => {
         {isPaused ? <FaPlay size={20} className="text-gray-600" /> : <FaPause size={20} className="text-gray-600" />}
       </button>
 
-      <div className="h-full flex flex-col justify-center items-center px-5">
+      {/* Center the main content vertically and horizontally */}
+      <div className="h-screen flex flex-col justify-center items-center px-5">
         <div className="w-full max-w-[580px]">
           <VolumeControl 
             volume={volume}
@@ -337,7 +488,7 @@ export const Events = () => {
 
                 {/* Date and time in bottom left */}
                 <div className="absolute bottom-6 sm:bottom-8 left-6 sm:left-8 flex flex-col sm:flex-row gap-1 sm:gap-2 text-sm sm:text-base">
-                                    <div>
+                  <div>
                     {new Date(filteredEvents[0].timestamp).toLocaleTimeString('en-US', {
                       hour: 'numeric',
                       minute: '2-digit',
@@ -381,41 +532,41 @@ export const Events = () => {
               </div>
             )}
           </div>
+          
+          {/* Updated splash animation */}
+          <style>{getSplashAnimation(filteredEvents[0])}</style>
         </div>
         
-        {/* Updated splash animation */}
-        <style>{getSplashAnimation(filteredEvents[0])}</style>
-      </div>
-      
-      {/* Powered by footer */}
-      <div className="fixed bottom-8 left-0 right-0 flex justify-center items-center gap-2">
-        <span className="text-xs text-gray-500">Powered by</span>
-        <img 
-          src={supersetLogo} 
-          alt="Superset Logo" 
-          className="h-3 w-auto"
-        />
-      </div>
-
-      {/* Paused indicator */}
-      {isPaused && (
-        <div className="fixed top-6 left-0 right-0 text-gray-400 text-2xl font-normal text-center">
-          Paused
+        {/* Powered by footer */}
+        <div className="fixed bottom-8 left-0 right-0 flex justify-center items-center gap-2">
+          <span className="text-xs text-gray-500">Powered by</span>
+          <img 
+            src={supersetLogo} 
+            alt="Superset Logo" 
+            className="h-3 w-auto"
+          />
         </div>
-      )}
 
-      {/* Daily Revenue Tally */}
-      <div 
-        className={`fixed bottom-6 left-6 font-normal transition-colors duration-300 ${
-          revenueChangeType === 'increase' 
-            ? 'text-green-700' 
-            : revenueChangeType === 'decrease' 
-              ? 'text-red-600' 
-              : 'text-gray-400'
-        }`}
-      >
-        <div className="text-sm">Revenue today</div>
-        <div className="text-2xl">{formatCurrency(dailyRevenue, 'USD')}</div>
+        {/* Paused indicator */}
+        {isPaused && (
+          <div className="fixed top-6 left-0 right-0 text-gray-400 text-2xl font-normal text-center">
+            Paused
+          </div>
+        )}
+
+        {/* Daily Revenue Tally */}
+        <div 
+          className={`fixed bottom-6 left-6 font-normal transition-colors duration-300 ${
+            revenueChangeType === 'increase' 
+              ? 'text-green-700' 
+              : revenueChangeType === 'decrease' 
+                ? 'text-red-600' 
+                : 'text-gray-400'
+          }`}
+        >
+          <div className="text-sm">Revenue today</div>
+          <div className="text-2xl">{formatCurrency(dailyRevenue, 'USD')}</div>
+        </div>
       </div>
     </div>
   );
