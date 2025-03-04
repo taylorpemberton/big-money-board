@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Event } from '../types/Event';
+import { formatCurrency } from '../utils/formatting';
 
 interface MRRProps {
   events: Event[];
@@ -48,43 +49,16 @@ export const MRR = ({ events }: MRRProps) => {
     return () => clearInterval(mrrInterval);
   }, [candleData]);
 
-  const formatCurrency = (amount: number, currency: string) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency,
-    }).format(amount);
-  };
-
   return (
-    <div className="w-[580px] h-[380px] rounded-3xl border-4 border-blue-400 p-6 relative">
-      <div className="flex flex-col h-full">
-        <h2 className="text-2xl font-bold mb-4">Monthly Recurring Revenue</h2>
-        <div className="flex-1 flex items-center justify-center">
-          <span className="text-6xl font-bold">
-            {formatCurrency(mrr, 'USD')}
-          </span>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-white p-4">
+      <div className="w-full max-w-[580px]">
+        <div className="text-4xl font-bold mb-8 text-center">
+          {formatCurrency(mrr, 'USD')}
         </div>
-        <div className="h-32 w-full">
+        <div className="w-full h-[320px] bg-gray-50 rounded-3xl p-4">
           <CandleChart data={candleData} />
         </div>
       </div>
-      
-      {/* Event cell in bottom right */}
-      {events[0] && (
-        <div className="absolute bottom-4 right-4 w-48 p-3 rounded-lg">
-          <div className="text-sm font-medium">{events[0].details}</div>
-          {events[0].amount ? (
-            <div className="text-lg font-semibold mt-1">
-              {formatCurrency(events[0].amount, events[0].currency || 'USD')}
-            </div>
-          ) : (
-            <div className="text-lg font-semibold mt-1">😃</div>
-          )}
-          <div className="text-xs text-gray-500 mt-1">
-            {new Date(events[0].timestamp).toLocaleTimeString()}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

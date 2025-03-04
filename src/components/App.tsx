@@ -1,24 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Events } from './Events';
-import { MRR } from './MRR';
-// import { Nav } from './Nav';
+import { Event } from '../types/Event';
 
 export const App = () => {
-  const [activeTab, setActiveTab] = useState('events');
+  const [events, setEvents] = useState<Event[]>([]);
+
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        const response = await fetch('http://localhost:3000/events');
+        const data = await response.json();
+        setEvents(data);
+      } catch (error) {
+        console.error('Error fetching events:', error);
+      }
+    };
+
+    fetchEvents();
+    const interval = setInterval(fetchEvents, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <div className="flex justify-center items-center min-h-screen bg-white">
-        <div className="p-4">
-          {/* <Nav activeTab={activeTab} onTabChange={setActiveTab} /> */}
-          
-          {activeTab === 'events' ? (
-            <Events />
-          ) : (
-            <MRR events={[]} />
-          )}
-        </div>
-      </div>
+    <div className="h-screen overflow-hidden">
+      <Events />
     </div>
   );
 }; 

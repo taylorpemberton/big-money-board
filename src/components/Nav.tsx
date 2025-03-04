@@ -1,33 +1,45 @@
 import React from 'react';
 
 interface NavProps {
-  activeTab: string;
-  onTabChange: (tab: string) => void;
+  activeTab: 'events' | 'mrr' | 'map';
+  onTabChange: (tab: 'events' | 'mrr' | 'map') => void;
 }
 
-export const Nav = ({ activeTab, onTabChange }: NavProps) => {
+export const Nav: React.FC<NavProps> = ({ activeTab, onTabChange }) => {
   return (
-    <div className="flex justify-center mb-4 bg-gray-100 p-1 rounded-full w-fit mx-auto shadow-inner">
-      <button
-        onClick={() => onTabChange('events')}
-        className={`px-6 py-2 rounded-full transition-all duration-200 ${
-          activeTab === 'events' 
-            ? 'bg-white shadow-lg text-blue-500' 
-            : 'text-gray-500 hover:bg-gray-50'
-        }`}
-      >
-        Events
-      </button>
-      <button
-        onClick={() => onTabChange('mrr')}
-        className={`px-6 py-2 rounded-full transition-all duration-200 ${
-          activeTab === 'mrr' 
-            ? 'bg-white shadow-lg text-blue-500' 
-            : 'text-gray-500 hover:bg-gray-50'
-        }`}
-      >
-        MRR
-      </button>
-    </div>
+    <nav className="bg-gray-900 p-4">
+      <div className="container mx-auto flex justify-center space-x-4">
+        <button
+          onClick={() => onTabChange('events')}
+          className={`px-4 py-2 rounded ${
+            activeTab === 'events'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+          }`}
+        >
+          Events
+        </button>
+        <button
+          onClick={() => onTabChange('mrr')}
+          className={`px-4 py-2 rounded ${
+            activeTab === 'mrr'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+          }`}
+        >
+          MRR
+        </button>
+        <button
+          onClick={() => onTabChange('map')}
+          className={`px-4 py-2 rounded ${
+            activeTab === 'map'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+          }`}
+        >
+          Map
+        </button>
+      </div>
+    </nav>
   );
 }; 
