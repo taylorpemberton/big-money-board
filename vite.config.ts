@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import viteCompression from 'vite-plugin-compression';
 
 export default defineConfig({
+  base: '/big-money-board/',
   plugins: [
     react(),
     viteCompression({
@@ -25,8 +26,10 @@ export default defineConfig({
         },
       },
     },
+    assetsDir: 'assets', // Ensure assets are in the correct directory
   },
   css: {
     postcss: './postcss.config.js', // Point to the updated PostCSS config
   },
+  publicDir: 'public', // Ensure public directory is copied to dist
 }); 

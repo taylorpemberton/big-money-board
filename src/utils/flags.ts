@@ -1,11 +1,17 @@
-export const currencyToCountry = {
-  USD: { country: 'US', flag: '🇺🇸' },
-  EUR: { country: 'EU', flag: '🇪🇺' },
-  GBP: { country: 'GB', flag: '🇬🇧' },
-  JPY: { country: 'JP', flag: '🇯🇵' },
-} as const;
+export const currencyToCountry: Record<string, { name: string; flag: string }> = {
+  USD: { name: 'United States', flag: '🇺🇸' },
+  EUR: { name: 'European Union', flag: '🇪🇺' },
+  GBP: { name: 'United Kingdom', flag: '🇬🇧' },
+  JPY: { name: 'Japan', flag: '🇯🇵' },
+  CAD: { name: 'Canada', flag: '🇨🇦' },
+  AUD: { name: 'Australia', flag: '🇦🇺' },
+  INR: { name: 'India', flag: '🇮🇳' },
+  CNY: { name: 'China', flag: '🇨🇳' },
+  BRL: { name: 'Brazil', flag: '🇧🇷' },
+  KRW: { name: 'South Korea', flag: '🇰🇷' }
+};
 
-export const getFlagEmoji = (countryCode: string) => {
+export const getFlagEmoji = (countryCode: string): string => {
   const codePoints = countryCode
     .toUpperCase()
     .split('')

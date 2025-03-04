@@ -29,23 +29,38 @@ interface SubscriptionEvent {
 type SampleEvent = ChargeEvent | CustomerEvent | SubscriptionEvent;
 
 // Helper function to generate random status
-const getRandomStatus = () => {
-  const statuses = ['succeeded', 'failed', 'pending'];
+const getRandomStatus = (): 'succeeded' | 'failed' | 'pending' => {
+  const statuses = ['succeeded', 'failed', 'pending'] as const;
   return statuses[Math.floor(Math.random() * statuses.length)];
 };
 
 // Helper function to get country flag based on currency
-const getCountryFlag = (currency: string) => {
-  const flags = {
-    USD: '🇺🇸',
-    EUR: '🇪🇺',
-    GBP: '🇬🇧',
-    JPY: '🇯🇵',
-    CAD: '🇨🇦',
-    AUD: '🇦🇺',
-    INR: '🇮🇳'
+const getCountryFlag = (currency: string): string => {
+  const flags: Record<string, string> = {
+    USD: '🇺🇸', // United States
+    CNY: '🇨🇳', // China
+    JPY: '🇯🇵', // Japan
+    EUR: '🇩🇪', // Germany
+    GBP: '🇬🇧', // United Kingdom
+    INR: '🇮🇳', // India
+    CAD: '🇨🇦', // Canada
+    BRL: '🇧🇷', // Brazil
+    KRW: '🇰🇷'  // South Korea
   };
   return flags[currency] || '🌍';
+};
+
+// Update conversion rates for all currencies
+const USD_CONVERSION_RATES: Record<string, number> = {
+  USD: 1,
+  CNY: 0.14,    // 1 CNY = 0.14 USD
+  JPY: 0.0067,  // 1 JPY = 0.0067 USD
+  EUR: 1.08,    // 1 EUR = 1.08 USD
+  GBP: 1.26,    // 1 GBP = 1.26 USD
+  INR: 0.012,   // 1 INR = 0.012 USD
+  CAD: 0.74,    // 1 CAD = 0.74 USD
+  BRL: 0.20,    // 1 BRL = 0.20 USD
+  KRW: 0.00075  // 1 KRW = 0.00075 USD
 };
 
 export const sampleEvents: SampleEvent[] = [
@@ -61,10 +76,73 @@ export const sampleEvents: SampleEvent[] = [
     {
       type: 'charge',
       status: getRandomStatus(),
-      amount: 4.20,
-      currency: 'USD',
-      countryFlag: getCountryFlag('USD'),
+      amount: 29.99,
+      currency: 'CNY',
+      countryFlag: getCountryFlag('CNY'),
       timestamp: '2023-07-20T09:07:00Z',
+      details: 'Application Fee charged'
+    },
+    {
+      type: 'charge',
+      status: getRandomStatus(),
+      amount: 1299,
+      currency: 'JPY',
+      countryFlag: getCountryFlag('JPY'),
+      timestamp: '2023-07-20T09:08:00Z',
+      details: 'Application Fee charged'
+    },
+    {
+      type: 'charge',
+      status: 'failed',
+      amount: 110.00,
+      currency: 'EUR',
+      countryFlag: getCountryFlag('EUR'),
+      timestamp: '2023-07-20T09:11:00Z',
+      details: 'Invoice charge failed'
+    },
+    {
+      type: 'charge',
+      status: getRandomStatus(),
+      amount: 79.00,
+      currency: 'GBP',
+      countryFlag: getCountryFlag('GBP'),
+      timestamp: '2023-07-20T09:35:00Z',
+      details: 'Invoice charge succeeded'
+    },
+    {
+      type: 'charge',
+      status: getRandomStatus(),
+      amount: 499,
+      currency: 'INR',
+      countryFlag: getCountryFlag('INR'),
+      timestamp: '2023-07-20T09:36:00Z',
+      details: 'Application Fee charged'
+    },
+    {
+      type: 'charge',
+      status: 'failed',
+      amount: 1.32,
+      currency: 'CAD',
+      countryFlag: getCountryFlag('CAD'),
+      timestamp: '2023-07-20T09:37:00Z',
+      details: 'Application Fee failed'
+    },
+    {
+      type: 'charge',
+      status: getRandomStatus(),
+      amount: 4.29,
+      currency: 'BRL',
+      countryFlag: getCountryFlag('BRL'),
+      timestamp: '2023-07-20T09:53:00Z',
+      details: 'Application Fee charged'
+    },
+    {
+      type: 'charge',
+      status: getRandomStatus(),
+      amount: 12900,
+      currency: 'KRW',
+      countryFlag: getCountryFlag('KRW'),
+      timestamp: '2023-07-20T09:54:00Z',
       details: 'Application Fee charged'
     },
     {
@@ -97,7 +175,7 @@ export const sampleEvents: SampleEvent[] = [
     {
       type: 'charge',
       status: getRandomStatus(),
-      amount: 4.20,
+      amount: 4.36,
       currency: 'USD',
       countryFlag: getCountryFlag('USD'),
       timestamp: '2023-07-20T09:36:00Z',
@@ -115,7 +193,7 @@ export const sampleEvents: SampleEvent[] = [
     {
       type: 'charge',
       status: getRandomStatus(),
-      amount: 4.00,
+      amount: 4.29,
       currency: 'USD',
       countryFlag: getCountryFlag('USD'),
       timestamp: '2023-07-20T09:53:00Z',
@@ -142,7 +220,7 @@ export const sampleEvents: SampleEvent[] = [
     {
       type: 'charge',
       status: getRandomStatus(),
-      amount: 4.00,
+      amount: 9.36,
       currency: 'USD',
       countryFlag: getCountryFlag('USD'),
       timestamp: '2023-07-20T10:20:00Z',
@@ -158,7 +236,7 @@ export const sampleEvents: SampleEvent[] = [
       type: 'subscription',
       email: 'jorgedgodoy@gmail.com',
       plan: 'base-graduated',
-      amount: 0,
+      amount: 62.39,
       currency: 'USD',
       quantity: 1,
       timestamp: '2023-07-20T10:30:00Z',
@@ -176,7 +254,7 @@ export const sampleEvents: SampleEvent[] = [
     {
       type: 'charge',
       status: getRandomStatus(),
-      amount: 4.20,
+      amount: 3.26,
       currency: 'USD',
       countryFlag: getCountryFlag('USD'),
       timestamp: '2023-07-20T10:54:00Z',
@@ -340,7 +418,7 @@ export const sampleEvents: SampleEvent[] = [
       type: 'subscription',
       email: 'kinzialvesfit@gmail.com',
       plan: 'base-graduated',
-      amount: 0,
+      amount: 45.25,
       currency: 'USD',
       quantity: 1,
       timestamp: '2023-07-20T12:48:00Z',
@@ -410,12 +488,13 @@ export const sampleEvents: SampleEvent[] = [
       details: 'Microtransaction charge failed'
     },
 ].map(event => {
-  if (event.type === 'charge') {
+  if (event.type === 'charge' && event.currency) {
     return {
       ...event,
+      type: 'charge' as const,
       status: getRandomStatus(),
       countryFlag: getCountryFlag(event.currency)
-    };
+    } as ChargeEvent;
   }
   return event;
 });
