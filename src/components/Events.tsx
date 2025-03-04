@@ -281,15 +281,6 @@ export const Events = () => {
                   getEventColors(filteredEvents[0]).background
                 } ${getEventColors(filteredEvents[0]).text}`}
               >
-                {/* Date in top right */}
-                <div className="absolute top-6 sm:top-8 right-6 sm:right-8 text-sm sm:text-base">
-                  {new Date(filteredEvents[0].timestamp).toLocaleDateString('en-US', {
-                    month: 'long',
-                    day: 'numeric',
-                    year: 'numeric'
-                  })}
-                </div>
-                
                 <div className="flex flex-col">
                   <span className="font-medium text-xl sm:text-xl">{filteredEvents[0].details}</span>
                   {filteredEvents[0].amount ? (
@@ -314,14 +305,24 @@ export const Events = () => {
                     <span className="text-7xl sm:text-[120px] font-semibold mt-4 sm:mt-6">😃</span>
                   )}
                 </div>
-                
-                {/* Timestamp in bottom left */}
-                <div className="absolute bottom-6 sm:bottom-8 left-6 sm:left-8 text-sm sm:text-base">
-                  {new Date(filteredEvents[0].timestamp).toLocaleTimeString('en-US', {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true
-                  })}
+
+                {/* Date and time in bottom left */}
+                <div className="absolute bottom-6 sm:bottom-8 left-6 sm:left-8 flex flex-col sm:flex-row gap-1 sm:gap-2 text-sm sm:text-base">
+                                    <div>
+                    {new Date(filteredEvents[0].timestamp).toLocaleTimeString('en-US', {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: true
+                    })}
+                  </div>
+                  •
+                  <div>
+                    {new Date(filteredEvents[0].timestamp).toLocaleDateString('en-US', {
+                      month: 'long',
+                      day: 'numeric',
+                      year: 'numeric'
+                    })}
+                  </div>
                 </div>
 
                 {/* Country flag in bottom right */}
