@@ -1,7 +1,7 @@
 {
   "name": "big-money-board",
   "version": "1.0.0",
-  "homepage": "https://<your-github-username>.github.io/<your-repo-name>",
+  "homepage": "https://taylorpemberton.github.io/big-money-board",
   "scripts": {
     "start": "vite",
     "build": "vite build",
@@ -9,7 +9,7 @@
     "server": "ts-node server/index.ts",
     "dev": "vite",
     "predeploy": "npm run build",
-    "deploy": "npm run build && git add dist && git commit -m 'Deploy to main' && git subtree push --prefix dist origin main",
+    "deploy": "gh-pages -d dist",
     "build:css": "node ./node_modules/.bin/tailwindcss -i ./src/tailwind.css -o ./src/styles/output.css",
     "watch:css": "node ./node_modules/.bin/tailwindcss -i ./src/tailwind.css -o ./src/styles/output.css --watch"
   },
