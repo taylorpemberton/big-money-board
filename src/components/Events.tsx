@@ -143,126 +143,102 @@ export const Events = () => {
 
   // Load real events from Stripe
   useEffect(() => {
-    // Function to load real events
-    const loadRealEvents = async () => {
+    // Function to load sample events
+    const loadSampleEvents = () => {
       try {
-        setIsLoading(true);
-        const realEvents = await fetchEvents();
-        
-        if (realEvents && realEvents.length > 0) {
-          // Get the latest event for sound playing
-          const latestEvent = realEvents[0];
+        // Import sample data
+        import('../data/sampleData').then(({ sampleEvents }) => {
+          console.log('Loaded sample events:', sampleEvents.length);
           
-          // Check if we have new events by comparing with current events
-          const isNewEvent = events.length === 0 || 
-            realEvents[0].timestamp !== events[0]?.timestamp ||
-            realEvents[0].details !== events[0]?.details;
-          
-          // Always play sound for the latest event if it's new
-          if (isNewEvent) {
-            // Play sound based on event type - do this before updating state
-            if (latestEvent.details.toLowerCase().includes('failed')) {
-              console.log('Playing failure sound for event:', latestEvent.details);
-              setLastEventWasFailed(true);
-              playFailure();
-              // Also try direct sound playing as fallback
-              playSound('failure');
-            } else if (latestEvent.details.toLowerCase().includes('new customer')) {
-              console.log('Playing generic sound for event:', latestEvent.details);
-              setLastEventWasFailed(false);
-              playGeneric();
-              // Also try direct sound playing as fallback
-              playSound('generic');
-            } else {
-              console.log('Playing success sound for event:', latestEvent.details);
-              setLastEventWasFailed(false);
-              playSuccess();
-              // Also try direct sound playing as fallback
-              playSound('success');
-            }
+          // If we already have events, only add a new one if it's different
+          if (events.length > 0) {
+            // Get a random event from the sample data
+            const randomIndex = Math.floor(Math.random() * sampleEvents.length);
+            const randomEvent = sampleEvents[randomIndex];
             
-            // Update the UI with new events
-            setEvents(realEvents);
+            // Update the timestamp to now
+            const updatedEvent = {
+              ...randomEvent,
+              timestamp: new Date().toISOString()
+            };
             
-            // Update daily revenue if this is a successful charge
-            if (latestEvent.type === 'charge' && latestEvent.status === 'succeeded' && latestEvent.amount) {
-              const amountInUSD = latestEvent.currency && latestEvent.currency !== 'USD' 
-                ? latestEvent.amount * (USD_CONVERSION_RATES[latestEvent.currency] || 1) 
-                : latestEvent.amount;
+            // Check if this is different from our current top event
+            const isNewEvent = !events[0] || 
+              events[0].details !== updatedEvent.details ||
+              events[0].type !== updatedEvent.type;
+            
+            if (isNewEvent) {
+              // Play sound based on event type
+              if (updatedEvent.details.toLowerCase().includes('failed')) {
+                console.log('Playing failure sound for event:', updatedEvent.details);
+                setLastEventWasFailed(true);
+                playFailure();
+                // Also try direct sound playing as fallback
+                playSound('failure');
+              } else if (updatedEvent.details.toLowerCase().includes('new customer')) {
+                console.log('Playing generic sound for event:', updatedEvent.details);
+                setLastEventWasFailed(false);
+                playGeneric();
+                // Also try direct sound playing as fallback
+                playSound('generic');
+              } else {
+                console.log('Playing success sound for event:', updatedEvent.details);
+                setLastEventWasFailed(false);
+                playSuccess();
+                // Also try direct sound playing as fallback
+                playSound('success');
+              }
               
-              setDailyRevenue(prev => prev + amountInUSD);
+              // Update the UI with new events
+              setEvents([updatedEvent, ...events.slice(0, 49)]);
+              
+              // Update daily revenue if this is a successful charge
+              if (updatedEvent.type === 'charge' && updatedEvent.status === 'succeeded' && 'amount' in updatedEvent) {
+                const amountInUSD = 'currency' in updatedEvent && updatedEvent.currency && updatedEvent.currency !== 'USD' 
+                  ? updatedEvent.amount * (USD_CONVERSION_RATES[updatedEvent.currency] || 1) 
+                  : updatedEvent.amount;
+                
+                setDailyRevenue(prev => prev + amountInUSD);
+              }
+              
+              // Flash effect for new events
+              setIsFlashing(true);
+              setTimeout(() => setIsFlashing(false), 1000);
             }
-            
-            // Flash effect for new events
-            setIsFlashing(true);
-            setTimeout(() => setIsFlashing(false), 1000);
+          } else {
+            // First load, just use the first event
+            const firstEvent = {
+              ...sampleEvents[0],
+              timestamp: new Date().toISOString()
+            };
+            setEvents([firstEvent]);
           }
-        }
-        
-        setError(null);
+          
+          setError(null);
+        }).catch(err => {
+          console.error('Failed to load sample events:', err);
+          setError('Failed to load sample events');
+        });
       } catch (err) {
-        console.error('Failed to load events:', err);
-        setError('Failed to load events from Stripe');
+        console.error('Failed to load sample events:', err);
+        setError('Failed to load sample events');
       } finally {
         setIsLoading(false);
       }
     };
     
     // Load events immediately
-    loadRealEvents();
+    loadSampleEvents();
     
-    // Set up a very infrequent polling as a fallback (every 60 seconds)
-    // This is just to ensure we don't miss events if the server doesn't notify us
+    // Set up a timer to add new events every few seconds
     const intervalId = setInterval(() => {
       if (!isPaused) {
-        loadRealEvents();
+        loadSampleEvents();
       }
-    }, 60000); // 60 seconds instead of 30 seconds
-    
-    // Set up event source for server-sent events (if supported by the browser)
-    const checkForNewEvents = () => {
-      // Only check if not paused
-      if (!isPaused) {
-        // Add a timestamp to prevent caching
-        const timestamp = new Date().getTime();
-        fetch(`${window.location.origin}/api/events/check-new?lastTimestamp=${events[0]?.timestamp || ''}&_=${timestamp}`)
-          .then(response => {
-            if (!response.ok) {
-              throw new Error(`HTTP error ${response.status}`);
-            }
-            return response.text();
-          })
-          .then(text => {
-            // Check if the response is HTML instead of JSON
-            if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
-              console.warn('Received HTML instead of JSON, skipping this check');
-              return { hasNewEvents: false };
-            }
-            
-            try {
-              return JSON.parse(text);
-            } catch (e) {
-              console.warn('Failed to parse JSON response:', text);
-              return { hasNewEvents: false };
-            }
-          })
-          .then(data => {
-            if (data.hasNewEvents) {
-              loadRealEvents();
-            }
-          })
-          .catch(err => {
-            console.error('Error checking for new events:', err);
-          });
-      }
-    };
-    
-    // Check for new events every 15 seconds (increased from 5 seconds)
-    const checkIntervalId = setInterval(checkForNewEvents, 15000);
+    }, 5000); // Add a new event every 5 seconds
     
     return () => {
       clearInterval(intervalId);
-      clearInterval(checkIntervalId);
     };
   }, [playSuccess, playFailure, playGeneric, isPaused, events]);
 
