@@ -46,17 +46,20 @@ export const Events = () => {
   const [isFlashing, setIsFlashing] = useState(false);
   const [audioContextInitialized, setAudioContextInitialized] = useState(false);
   
-  const [playSuccess] = useSound('/sounds/success.mp3', { 
+  const [playSuccess] = useSound('/sounds/success.mp3', {
     volume: isMuted ? 0 : volume,
-    interrupt: true
+    interrupt: true,
+    soundEnabled: true,
   });
-  const [playFailure] = useSound('/sounds/oh-brother.mp3', { 
+  const [playFailure] = useSound('/sounds/oh-brother.mp3', {
     volume: isSydneyMuted ? 0 : volume,
-    interrupt: true
+    interrupt: true,
+    soundEnabled: true,
   });
-  const [playGeneric] = useSound('/sounds/success.mp3', { 
+  const [playGeneric] = useSound('/sounds/success.mp3', {
     volume: isMuted ? 0 : volume,
-    interrupt: true
+    interrupt: true,
+    soundEnabled: true,
   });
 
   const amountRef = useRef<HTMLSpanElement>(null);
@@ -66,9 +69,50 @@ export const Events = () => {
   const playSound = (type: 'success' | 'failure' | 'generic') => {
     console.log(`Attempting to play ${type} sound directly`);
     try {
+      // Create a new audio element
       const audio = new Audio(`/sounds/${type === 'success' ? 'success.mp3' : type === 'failure' ? 'oh-brother.mp3' : 'success.mp3'}`);
+      
+      // Set volume based on mute state
       audio.volume = type === 'failure' ? (isSydneyMuted ? 0 : volume) : (isMuted ? 0 : volume);
-      audio.play().catch(e => console.error('Error playing sound:', e));
+      
+      // Try to play the sound
+      const playPromise = audio.play();
+      
+      // Handle play promise
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            console.log(`${type} sound played successfully`);
+          })
+          .catch(e => {
+            console.error(`Error playing ${type} sound:`, e);
+            
+            // If autoplay was prevented, try again with user interaction simulation
+            if (e.name === 'NotAllowedError') {
+              console.log('Autoplay prevented, trying alternative approach');
+              
+              // Create a temporary button and click it to simulate user interaction
+              const tempButton = document.createElement('button');
+              tempButton.style.display = 'none';
+              document.body.appendChild(tempButton);
+              
+              // Add event listener to play sound on click
+              tempButton.addEventListener('click', () => {
+                const newAudio = new Audio(`/sounds/${type === 'success' ? 'success.mp3' : type === 'failure' ? 'oh-brother.mp3' : 'success.mp3'}`);
+                newAudio.volume = type === 'failure' ? (isSydneyMuted ? 0 : volume) : (isMuted ? 0 : volume);
+                newAudio.play()
+                  .then(() => console.log(`${type} sound played after user interaction simulation`))
+                  .catch(err => console.error('Still failed to play sound:', err));
+                
+                // Remove the temporary button
+                document.body.removeChild(tempButton);
+              });
+              
+              // Simulate a click
+              tempButton.click();
+            }
+          });
+      }
     } catch (e) {
       console.error('Error creating Audio object:', e);
     }
@@ -322,21 +366,68 @@ export const Events = () => {
         // Also try to play each sound once with volume 0 to initialize them
         const initSounds = async () => {
           try {
+            console.log('Initializing sounds...');
+            
             // Create and play silent versions of all sounds
             const sounds = [
               new Audio('/sounds/success.mp3'),
-              new Audio('/sounds/oh-brother.mp3')
+              new Audio('/sounds/oh-brother.mp3'),
+              new Audio('/sounds/generic.mp3')
             ];
             
             // Set volume to 0 and play each sound
-            sounds.forEach(sound => {
+            const playPromises = sounds.map(sound => {
               sound.volume = 0;
-              sound.play().catch(e => console.error('Error pre-loading sound:', e));
+              // Loop the sound to keep it active
+              sound.loop = true;
+              return sound.play()
+                .then(() => {
+                  // After a short time, pause it to save resources
+                  setTimeout(() => {
+                    sound.pause();
+                    sound.currentTime = 0;
+                  }, 1000);
+                  return true;
+                })
+                .catch(e => {
+                  console.error('Error pre-loading sound:', e);
+                  return false;
+                });
             });
+            
+            // Wait for all sounds to be initialized
+            const results = await Promise.allSettled(playPromises);
+            const allSucceeded = results.every(result => result.status === 'fulfilled' && result.value === true);
             
             // Set state to indicate audio is initialized
             setAudioContextInitialized(true);
-            console.log('Audio context and sounds initialized automatically');
+            console.log('Audio context and sounds initialized automatically:', allSucceeded ? 'success' : 'partial success');
+            
+            // If initialization was successful, try to play a silent version of each function
+            if (allSucceeded) {
+              try {
+                // Call each play function with volume 0
+                const originalVolume = volume;
+                setVolume(0);
+                
+                // Force the volume to 0 temporarily
+                setTimeout(() => {
+                  playSuccess();
+                  setTimeout(() => {
+                    playFailure();
+                    setTimeout(() => {
+                      playGeneric();
+                      // Restore volume after initialization
+                      setTimeout(() => {
+                        setVolume(originalVolume);
+                      }, 100);
+                    }, 100);
+                  }, 100);
+                }, 100);
+              } catch (e) {
+                console.error('Error initializing play functions:', e);
+              }
+            }
           } catch (err) {
             console.error('Error initializing sounds:', err);
           }
