@@ -28,6 +28,9 @@ export const Events = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [showInternationalOnly, setShowInternationalOnly] = useState(false);
   const [lastEventWasFailed, setLastEventWasFailed] = useState(false);
+  const [dailyRevenue, setDailyRevenue] = useState(0);
+  const [previousDailyRevenue, setPreviousDailyRevenue] = useState(0);
+  const [revenueChangeType, setRevenueChangeType] = useState<'increase' | 'decrease' | null>(null);
   const [volume, setVolume] = useState(() => {
     const savedVolume = localStorage.getItem('volume');
     return savedVolume ? parseFloat(savedVolume) : 0.5;
@@ -74,15 +77,52 @@ export const Events = () => {
 
   // Add initial event when component mounts
   useEffect(() => {
+    // Create a standalone fake success event
     const initialEvent: Event = {
-      type: 'customer',
-      email: 'welcome@bigmoneyboard.com',
+      type: 'charge',
+      status: 'succeeded',
+      amount: 42.99,
+      currency: 'USD',
+      country: 'US',
       timestamp: new Date().toISOString(),
-      details: 'Welcome to Big Money Board! 🎉'
+      details: 'Application Fee charged',
+      email: 'customer@example.com'
     };
+    
     setEvents([initialEvent]);
-    playGeneric();
+    playSuccess();
+  }, [playSuccess]);
+
+  // Calculate daily revenue
+  useEffect(() => {
+    // Reset daily revenue at midnight
+    const resetDailyRevenue = () => {
+      const now = new Date();
+      if (now.getHours() === 0 && now.getMinutes() === 0) {
+        setPreviousDailyRevenue(0);
+        setDailyRevenue(0);
+        setRevenueChangeType(null);
+      }
+    };
+
+    // Check for midnight reset every minute
+    const midnightCheckInterval = setInterval(resetDailyRevenue, 60000);
+    
+    return () => clearInterval(midnightCheckInterval);
   }, []);
+
+  // Track revenue changes and flash effect
+  useEffect(() => {
+    if (dailyRevenue > previousDailyRevenue) {
+      setRevenueChangeType('increase');
+      setTimeout(() => setRevenueChangeType(null), 1500);
+    } else if (dailyRevenue < previousDailyRevenue) {
+      setRevenueChangeType('decrease');
+      setTimeout(() => setRevenueChangeType(null), 1500);
+    }
+    
+    setPreviousDailyRevenue(dailyRevenue);
+  }, [dailyRevenue]);
 
   useEffect(() => {
     if (isPaused) return;
@@ -104,6 +144,15 @@ export const Events = () => {
         const newEvent = sampleEvents[currentIndex];
         const isFailed = newEvent.details.toLowerCase().includes('failed');
         setLastEventWasFailed(isFailed);
+        
+        // Update daily revenue if this is a successful charge
+        if (!isFailed && newEvent.type === 'charge' && newEvent.amount) {
+          const amountInUSD = newEvent.currency && newEvent.currency !== 'USD' 
+            ? newEvent.amount * (USD_CONVERSION_RATES[newEvent.currency] || 1) 
+            : newEvent.amount;
+          
+          setDailyRevenue(prev => prev + amountInUSD);
+        }
         
         if (isFailed) {
           playFailure();
@@ -166,67 +215,47 @@ export const Events = () => {
     const containerWidth = amountRef.current.parentElement?.offsetWidth || 0;
     const contentWidth = amountRef.current.scrollWidth;
     
-    if (contentWidth > containerWidth) {
-      // Try progressively smaller sizes until it fits
-      const sizes = [
-        'text-7xl sm:text-[120px]',
-        'text-6xl sm:text-[100px]',
-        'text-5xl sm:text-[90px]',
-        'text-4xl sm:text-[80px]'
-      ];
-      
-      // Start with the current size
-      let currentSize = amountFontSize;
-      let currentIndex = sizes.indexOf(currentSize);
-      if (currentIndex === -1) currentIndex = 0;
-      
-      // Try the next size down
-      const nextSize = sizes[currentIndex + 1] || sizes[sizes.length - 1];
-      setAmountFontSize(nextSize);
-      
-      // Check if it still overflows after a brief delay to allow the new size to apply
-      setTimeout(() => {
-        if (amountRef.current && amountRef.current.scrollWidth > containerWidth) {
-          // If still overflowing, try the next size
-          const nextIndex = sizes.indexOf(nextSize) + 1;
-          if (nextIndex < sizes.length) {
-            setAmountFontSize(sizes[nextIndex]);
-          }
-        }
-      }, 50);
-    } else {
-      // If it fits, try going back up one size
-      const sizes = [
-        'text-7xl sm:text-[120px]',
-        'text-6xl sm:text-[100px]',
-        'text-5xl sm:text-[90px]',
-        'text-4xl sm:text-[80px]'
-      ];
-      
-      const currentIndex = sizes.indexOf(amountFontSize);
-      if (currentIndex > 0) {
-        const nextSize = sizes[currentIndex - 1];
-        setAmountFontSize(nextSize);
-        
-        // Check if it still fits after a brief delay
-        setTimeout(() => {
-          if (amountRef.current && amountRef.current.scrollWidth > containerWidth) {
-            // If it doesn't fit, go back to the previous size
-            setAmountFontSize(amountFontSize);
-          }
-        }, 50);
+    // Define fixed size classes
+    const sizes = [
+      'text-7xl sm:text-[120px]',
+      'text-6xl sm:text-[100px]',
+      'text-5xl sm:text-[90px]',
+      'text-4xl sm:text-[80px]'
+    ];
+    
+    // Use a more conservative approach - if content is too large, immediately use a smaller size
+    if (contentWidth > containerWidth * 0.9) {
+      // If content is very large, use the smallest size
+      if (contentWidth > containerWidth * 1.5) {
+        setAmountFontSize(sizes[3]);
+      } 
+      // If content is moderately large, use the second smallest size
+      else if (contentWidth > containerWidth * 1.2) {
+        setAmountFontSize(sizes[2]);
       }
+      // If content is slightly large, use the medium size
+      else {
+        setAmountFontSize(sizes[1]);
+      }
+    } 
+    // If content fits well, use the largest size
+    else {
+      setAmountFontSize(sizes[0]);
     }
   };
 
-  // Adjust font size when amount or currency changes
+  // Adjust font size when amount or currency changes, but with debounce
   useEffect(() => {
-    // Reset to largest size first
-    setAmountFontSize('text-7xl sm:text-[120px]');
-    // Then adjust if needed
-    setTimeout(adjustFontSize, 50);
+    // Use a timeout to debounce the adjustment
+    const timeoutId = setTimeout(adjustFontSize, 50);
+    
+    // Add resize listener
     window.addEventListener('resize', adjustFontSize);
-    return () => window.removeEventListener('resize', adjustFontSize);
+    
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('resize', adjustFontSize);
+    };
   }, [filteredEvents[0]?.amount, filteredEvents[0]?.currency]);
 
   return (
@@ -241,10 +270,10 @@ export const Events = () => {
       {/* International Toggle */}
       <button
         onClick={handleInternationalToggle}
-        className={`fixed top-4 left-4 z-50 px-4 py-2 rounded-lg text-base font-semibold transition-all duration-200 shadow-md ${
+        className={`fixed -ml-2 -mt-2 top-4 left-4 z-50 px-4 py-2 rounded-lg text-base font-semibold transition-all duration-200 ${
           showInternationalOnly 
             ? 'bg-blue-500 text-white hover:bg-blue-600' 
-            : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
+            : 'bg-white text-gray-700 hover:bg-gray-50'
         }`}
       >
         {showInternationalOnly ? '🌍 Int\'l Only' : '🌎 All Events'}
@@ -287,7 +316,7 @@ export const Events = () => {
                     <div className="flex flex-col">
                       <span 
                         ref={amountRef}
-                        className={`font-semibold mt-4 sm:mt-6 ${amountFontSize}`}
+                        className={`font-semibold mt-4 sm:mt-6 transition-none ${amountFontSize}`}
                       >
                         {formatCurrency(filteredEvents[0].amount, filteredEvents[0].currency || 'USD')}
                       </span>
@@ -374,6 +403,20 @@ export const Events = () => {
           Paused
         </div>
       )}
+
+      {/* Daily Revenue Tally */}
+      <div 
+        className={`fixed bottom-6 left-6 font-normal transition-colors duration-300 ${
+          revenueChangeType === 'increase' 
+            ? 'text-green-700' 
+            : revenueChangeType === 'decrease' 
+              ? 'text-red-600' 
+              : 'text-gray-400'
+        }`}
+      >
+        <div className="text-sm">Revenue today</div>
+        <div className="text-2xl">{formatCurrency(dailyRevenue, 'USD')}</div>
+      </div>
     </div>
   );
 }; 
