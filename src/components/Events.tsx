@@ -36,41 +36,56 @@ export const Events = () => {
   });
   const [isMuted, setIsMuted] = useState(() => {
     const savedMuted = localStorage.getItem('isMuted');
-    return savedMuted ? JSON.parse(savedMuted) : false;
+    return savedMuted ? JSON.parse(savedMuted) : true; // Default to muted
   });
   const [isSydneyMuted, setIsSydneyMuted] = useState(() => {
     const savedSydneyMuted = localStorage.getItem('isSydneyMuted');
     return savedSydneyMuted ? JSON.parse(savedSydneyMuted) : false;
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [isContentVisible, setIsContentVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isFlashing, setIsFlashing] = useState(false);
   const [audioContextInitialized, setAudioContextInitialized] = useState(false);
+  const [wasRecentlyUnpaused, setWasRecentlyUnpaused] = useState(false);
   
   const [playSuccess] = useSound('/sounds/success.mp3', {
     volume: isMuted ? 0 : volume,
-    interrupt: true,
-    soundEnabled: true,
+    interrupt: false, // Prevent interrupting ongoing sounds
+    soundEnabled: !isMuted && !wasRecentlyUnpaused,
   });
   const [playFailure] = useSound('/sounds/oh-brother.mp3', {
     volume: isSydneyMuted ? 0 : volume,
-    interrupt: true,
-    soundEnabled: true,
+    interrupt: false, // Prevent interrupting ongoing sounds
+    soundEnabled: !isSydneyMuted && !wasRecentlyUnpaused,
   });
   const [playGeneric] = useSound('/sounds/success.mp3', {
     volume: isMuted ? 0 : volume,
-    interrupt: true,
-    soundEnabled: true,
+    interrupt: false, // Prevent interrupting ongoing sounds
+    soundEnabled: !isMuted && !wasRecentlyUnpaused,
   });
 
   const amountRef = useRef<HTMLSpanElement>(null);
   const [amountFontSize, setAmountFontSize] = useState('text-7xl sm:text-[120px]');
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const soundTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Add a direct sound playing function as a fallback
   const playSound = (type: 'success' | 'failure' | 'generic') => {
+    // Don't play sounds if muted or recently unpaused
+    if ((type === 'failure' && isSydneyMuted) || 
+        (type !== 'failure' && isMuted) || 
+        wasRecentlyUnpaused) {
+      return;
+    }
+    
     console.log(`Attempting to play ${type} sound directly`);
     try {
+      // Clear any existing sound timeout to prevent double-playing
+      if (soundTimeoutRef.current) {
+        clearTimeout(soundTimeoutRef.current);
+      }
+      
       // Create a new audio element
       const audio = new Audio(`/sounds/${type === 'success' ? 'success.mp3' : type === 'failure' ? 'oh-brother.mp3' : 'success.mp3'}`);
       
@@ -88,31 +103,6 @@ export const Events = () => {
           })
           .catch(e => {
             console.error(`Error playing ${type} sound:`, e);
-            
-            // If autoplay was prevented, try again with user interaction simulation
-            if (e.name === 'NotAllowedError') {
-              console.log('Autoplay prevented, trying alternative approach');
-              
-              // Create a temporary button and click it to simulate user interaction
-              const tempButton = document.createElement('button');
-              tempButton.style.display = 'none';
-              document.body.appendChild(tempButton);
-              
-              // Add event listener to play sound on click
-              tempButton.addEventListener('click', () => {
-                const newAudio = new Audio(`/sounds/${type === 'success' ? 'success.mp3' : type === 'failure' ? 'oh-brother.mp3' : 'success.mp3'}`);
-                newAudio.volume = type === 'failure' ? (isSydneyMuted ? 0 : volume) : (isMuted ? 0 : volume);
-                newAudio.play()
-                  .then(() => console.log(`${type} sound played after user interaction simulation`))
-                  .catch(err => console.error('Still failed to play sound:', err));
-                
-                // Remove the temporary button
-                document.body.removeChild(tempButton);
-              });
-              
-              // Simulate a click
-              tempButton.click();
-            }
           });
       }
     } catch (e) {
@@ -120,13 +110,52 @@ export const Events = () => {
     }
   };
 
+  // Handle pause/unpause
+  const handlePauseToggle = () => {
+    const newPausedState = !isPaused;
+    setIsPaused(newPausedState);
+    
+    // If unpausing, set the recently unpaused flag to prevent immediate sound
+    if (!newPausedState) {
+      setWasRecentlyUnpaused(true);
+      
+      // Reset the flag after the next event cycle
+      setTimeout(() => {
+        setWasRecentlyUnpaused(false);
+      }, 5000); // Match with the event interval
+    }
+  };
+
   // Handle event source toggle
   const handleEventSourceChange = (source: 'real' | 'test') => {
-    setEventSource(source);
+    // Don't reset if already on the same source
+    if (source === eventSource) {
+      setIsDropdownOpen(false);
+      return;
+    }
+    
     setIsDropdownOpen(false);
-    // Clear existing events when switching sources
-    setEvents([]);
-    setIsLoading(true);
+    
+    // Use a fade-out effect before changing the data
+    setIsFlashing(true);
+    setIsContentVisible(false);
+    
+    // Delay the actual data change to allow for the transition
+    setTimeout(() => {
+      setEventSource(source);
+      // Clear existing events when switching sources
+      setEvents([]);
+      setIsLoading(true);
+      setIsFlashing(false);
+      
+      // For Real Events, we want to show the empty state immediately
+      if (source === 'real') {
+        setIsLoading(false);
+        setTimeout(() => {
+          setIsContentVisible(true);
+        }, 100);
+      }
+    }, 300); // Match this with the transition duration
   };
 
   // Save volume and mute states to localStorage
@@ -144,6 +173,8 @@ export const Events = () => {
 
   // Load events based on selected source
   useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+    
     // Function to load sample events
     const loadSampleEvents = () => {
       try {
@@ -169,25 +200,57 @@ export const Events = () => {
               events[0].type !== updatedEvent.type;
             
             if (isNewEvent) {
-              // Play sound based on event type
-              if (updatedEvent.details.toLowerCase().includes('failed')) {
-                console.log('Playing failure sound for event:', updatedEvent.details);
-                setLastEventWasFailed(true);
-                playFailure();
-                // Also try direct sound playing as fallback
-                playSound('failure');
-              } else if (updatedEvent.details.toLowerCase().includes('new customer')) {
-                console.log('Playing generic sound for event:', updatedEvent.details);
-                setLastEventWasFailed(false);
-                playGeneric();
-                // Also try direct sound playing as fallback
-                playSound('generic');
+              // Play sound based on event type, but only if not recently unpaused
+              if (!wasRecentlyUnpaused) {
+                if (updatedEvent.details.toLowerCase().includes('failed')) {
+                  console.log('Playing failure sound for event:', updatedEvent.details);
+                  setLastEventWasFailed(true);
+                  
+                  // Prevent double-playing by using a timeout
+                  if (soundTimeoutRef.current) {
+                    clearTimeout(soundTimeoutRef.current);
+                  }
+                  
+                  soundTimeoutRef.current = setTimeout(() => {
+                    playFailure();
+                    // Also try direct sound playing as fallback
+                    playSound('failure');
+                  }, 50);
+                } else if (updatedEvent.details.toLowerCase().includes('new customer')) {
+                  console.log('Playing generic sound for event:', updatedEvent.details);
+                  setLastEventWasFailed(false);
+                  
+                  // Prevent double-playing by using a timeout
+                  if (soundTimeoutRef.current) {
+                    clearTimeout(soundTimeoutRef.current);
+                  }
+                  
+                  soundTimeoutRef.current = setTimeout(() => {
+                    playGeneric();
+                    // Also try direct sound playing as fallback
+                    playSound('generic');
+                  }, 50);
+                } else {
+                  console.log('Playing success sound for event:', updatedEvent.details);
+                  setLastEventWasFailed(false);
+                  
+                  // Prevent double-playing by using a timeout
+                  if (soundTimeoutRef.current) {
+                    clearTimeout(soundTimeoutRef.current);
+                  }
+                  
+                  soundTimeoutRef.current = setTimeout(() => {
+                    playSuccess();
+                    // Also try direct sound playing as fallback
+                    playSound('success');
+                  }, 50);
+                }
               } else {
-                console.log('Playing success sound for event:', updatedEvent.details);
-                setLastEventWasFailed(false);
-                playSuccess();
-                // Also try direct sound playing as fallback
-                playSound('success');
+                // If recently unpaused, just update the UI without sound
+                console.log('Skipping sound because recently unpaused');
+                setLastEventWasFailed(updatedEvent.details.toLowerCase().includes('failed'));
+                // Reset the flag after this event
+                setWasRecentlyUnpaused(false);
               }
               
               // Update the UI with new events
@@ -195,11 +258,14 @@ export const Events = () => {
               
               // Update daily revenue if this is a successful charge
               if (updatedEvent.type === 'charge' && updatedEvent.status === 'succeeded' && 'amount' in updatedEvent) {
-                const amountInUSD = 'currency' in updatedEvent && updatedEvent.currency && updatedEvent.currency !== 'USD' 
-                  ? updatedEvent.amount * (USD_CONVERSION_RATES[updatedEvent.currency] || 1) 
-                  : updatedEvent.amount;
-                
-                setDailyRevenue(prev => prev + amountInUSD);
+                const amount = updatedEvent.amount;
+                if (amount !== undefined) {
+                  const amountInUSD = 'currency' in updatedEvent && updatedEvent.currency && updatedEvent.currency !== 'USD' 
+                    ? amount * (USD_CONVERSION_RATES[updatedEvent.currency] || 1) 
+                    : amount;
+                  
+                  setDailyRevenue(prev => prev + amountInUSD);
+                }
               }
               
               // Flash effect for new events
@@ -216,14 +282,20 @@ export const Events = () => {
           }
           
           setError(null);
+          setIsLoading(false);
+          
+          // After loading events, fade in the content
+          setTimeout(() => {
+            setIsContentVisible(true);
+          }, 100);
         }).catch(err => {
           console.error('Failed to load sample events:', err);
           setError('Failed to load sample events');
+          setIsLoading(false);
         });
       } catch (err) {
         console.error('Failed to load sample events:', err);
         setError('Failed to load sample events');
-      } finally {
         setIsLoading(false);
       }
     };
@@ -232,33 +304,69 @@ export const Events = () => {
     const loadRealEvents = async () => {
       try {
         const realEvents = await fetchEvents();
+        
+        // Always set loading to false and fade in content, even if no events
+        setIsLoading(false);
+        
         if (realEvents.length > 0) {
           // If we have new events, update the UI
           setEvents(prevEvents => {
             // Check if we have new events
             if (prevEvents.length === 0 || realEvents[0].timestamp !== prevEvents[0].timestamp) {
-              // Play sound based on the latest event
-              const latestEvent = realEvents[0];
-              if (latestEvent.details.toLowerCase().includes('failed')) {
-                setLastEventWasFailed(true);
-                playFailure();
-                playSound('failure');
-              } else if (latestEvent.details.toLowerCase().includes('new customer')) {
-                setLastEventWasFailed(false);
-                playGeneric();
-                playSound('generic');
+              // Play sound based on the latest event, but only if not recently unpaused
+              if (!wasRecentlyUnpaused) {
+                const latestEvent = realEvents[0];
+                if (latestEvent.details.toLowerCase().includes('failed')) {
+                  setLastEventWasFailed(true);
+                  
+                  // Prevent double-playing by using a timeout
+                  if (soundTimeoutRef.current) {
+                    clearTimeout(soundTimeoutRef.current);
+                  }
+                  
+                  soundTimeoutRef.current = setTimeout(() => {
+                    playFailure();
+                    playSound('failure');
+                  }, 50);
+                } else if (latestEvent.details.toLowerCase().includes('new customer')) {
+                  setLastEventWasFailed(false);
+                  
+                  // Prevent double-playing by using a timeout
+                  if (soundTimeoutRef.current) {
+                    clearTimeout(soundTimeoutRef.current);
+                  }
+                  
+                  soundTimeoutRef.current = setTimeout(() => {
+                    playGeneric();
+                    playSound('generic');
+                  }, 50);
+                } else {
+                  setLastEventWasFailed(false);
+                  
+                  // Prevent double-playing by using a timeout
+                  if (soundTimeoutRef.current) {
+                    clearTimeout(soundTimeoutRef.current);
+                  }
+                  
+                  soundTimeoutRef.current = setTimeout(() => {
+                    playSuccess();
+                    playSound('success');
+                  }, 50);
+                }
               } else {
-                setLastEventWasFailed(false);
-                playSuccess();
-                playSound('success');
+                // If recently unpaused, just update the UI without sound
+                console.log('Skipping sound because recently unpaused');
+                setLastEventWasFailed(realEvents[0].details.toLowerCase().includes('failed'));
+                // Reset the flag after this event
+                setWasRecentlyUnpaused(false);
               }
 
               // Update daily revenue if this is a successful charge
-              if (latestEvent.type === 'charge' && latestEvent.status === 'succeeded' && 'amount' in latestEvent) {
-                const amount = latestEvent.amount;
+              if (realEvents[0].type === 'charge' && realEvents[0].status === 'succeeded' && 'amount' in realEvents[0]) {
+                const amount = realEvents[0].amount;
                 if (amount !== undefined) {
-                  const amountInUSD = 'currency' in latestEvent && latestEvent.currency && latestEvent.currency !== 'USD' 
-                    ? amount * (USD_CONVERSION_RATES[latestEvent.currency] || 1) 
+                  const amountInUSD = 'currency' in realEvents[0] && realEvents[0].currency && realEvents[0].currency !== 'USD' 
+                    ? amount * (USD_CONVERSION_RATES[realEvents[0].currency] || 1) 
                     : amount;
                   
                   setDailyRevenue(prev => prev + amountInUSD);
@@ -274,37 +382,250 @@ export const Events = () => {
             return prevEvents;
           });
         }
+        
         setError(null);
+        
+        // After loading events, fade in the content
+        setTimeout(() => {
+          setIsContentVisible(true);
+        }, 100);
       } catch (err) {
         console.error('Failed to load real events:', err);
         setError('Failed to load real events from Stripe');
-      } finally {
         setIsLoading(false);
+        
+        // Still fade in to show the error state
+        setTimeout(() => {
+          setIsContentVisible(true);
+        }, 100);
       }
     };
     
+    // Reset visibility state when changing sources
+    setIsContentVisible(false);
+    
     // Load events immediately based on selected source
     if (eventSource === 'test') {
-      loadSampleEvents();
+      // Only load sample events if we don't have any yet
+      if (events.length === 0) {
+        loadSampleEvents();
+      } else {
+        // If we already have events, just make them visible
+        setIsLoading(false);
+        setTimeout(() => {
+          setIsContentVisible(true);
+        }, 100);
+      }
     } else {
       loadRealEvents();
     }
     
-    // Set up a timer to add new events every few seconds
-    const intervalId = setInterval(() => {
-      if (!isPaused) {
+    // Set up a timer to add new events every few seconds, but only if not paused
+    if (!isPaused) {
+      intervalId = setInterval(() => {
         if (eventSource === 'test') {
           loadSampleEvents();
         } else {
           loadRealEvents();
         }
-      }
-    }, 5000); // Add a new event every 5 seconds
+      }, 5000); // Add a new event every 5 seconds
+    }
     
     return () => {
-      clearInterval(intervalId);
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
     };
-  }, [playSuccess, playFailure, playGeneric, isPaused, events, eventSource]);
+  }, [playSuccess, playFailure, playGeneric, wasRecentlyUnpaused, eventSource]); // Remove isPaused and events from dependencies
+
+  // Handle pause/unpause separately to avoid reloading events
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+    
+    // Define loadRealEvents function for this effect
+    const loadRealEvents = async () => {
+      try {
+        const realEvents = await fetchEvents();
+        
+        if (realEvents.length > 0) {
+          // If we have new events, update the UI
+          setEvents(prevEvents => {
+            // Check if we have new events
+            if (prevEvents.length === 0 || realEvents[0].timestamp !== prevEvents[0].timestamp) {
+              // Play sound based on the latest event, but only if not recently unpaused
+              if (!wasRecentlyUnpaused) {
+                const latestEvent = realEvents[0];
+                if (latestEvent.details.toLowerCase().includes('failed')) {
+                  setLastEventWasFailed(true);
+                  
+                  // Prevent double-playing by using a timeout
+                  if (soundTimeoutRef.current) {
+                    clearTimeout(soundTimeoutRef.current);
+                  }
+                  
+                  soundTimeoutRef.current = setTimeout(() => {
+                    playFailure();
+                    playSound('failure');
+                  }, 50);
+                } else if (latestEvent.details.toLowerCase().includes('new customer')) {
+                  setLastEventWasFailed(false);
+                  
+                  // Prevent double-playing by using a timeout
+                  if (soundTimeoutRef.current) {
+                    clearTimeout(soundTimeoutRef.current);
+                  }
+                  
+                  soundTimeoutRef.current = setTimeout(() => {
+                    playGeneric();
+                    playSound('generic');
+                  }, 50);
+                } else {
+                  setLastEventWasFailed(false);
+                  
+                  // Prevent double-playing by using a timeout
+                  if (soundTimeoutRef.current) {
+                    clearTimeout(soundTimeoutRef.current);
+                  }
+                  
+                  soundTimeoutRef.current = setTimeout(() => {
+                    playSuccess();
+                    playSound('success');
+                  }, 50);
+                }
+              } else {
+                // If recently unpaused, just update the UI without sound
+                console.log('Skipping sound because recently unpaused');
+                setLastEventWasFailed(realEvents[0].details.toLowerCase().includes('failed'));
+                // Reset the flag after this event
+                setWasRecentlyUnpaused(false);
+              }
+
+              // Update daily revenue if this is a successful charge
+              if (realEvents[0].type === 'charge' && realEvents[0].status === 'succeeded' && 'amount' in realEvents[0]) {
+                const amount = realEvents[0].amount;
+                if (amount !== undefined) {
+                  const amountInUSD = 'currency' in realEvents[0] && realEvents[0].currency && realEvents[0].currency !== 'USD' 
+                    ? amount * (USD_CONVERSION_RATES[realEvents[0].currency] || 1) 
+                    : amount;
+                  
+                  setDailyRevenue(prev => prev + amountInUSD);
+                }
+              }
+
+              // Flash effect for new events
+              setIsFlashing(true);
+              setTimeout(() => setIsFlashing(false), 1000);
+
+              return realEvents;
+            }
+            return prevEvents;
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load real events:', err);
+      }
+    };
+    
+    // If not paused, start the timer
+    if (!isPaused && eventSource === 'test') {
+      intervalId = setInterval(() => {
+        if (eventSource === 'test') {
+          // Import sample data
+          import('../data/sampleData').then(({ sampleEvents }) => {
+            // Get a random event from the sample data
+            const randomIndex = Math.floor(Math.random() * sampleEvents.length);
+            const randomEvent = sampleEvents[randomIndex];
+            
+            // Update the timestamp to now
+            const updatedEvent = {
+              ...randomEvent,
+              timestamp: new Date().toISOString()
+            };
+            
+            // Play sound based on event type, but only if not recently unpaused
+            if (!wasRecentlyUnpaused) {
+              if (updatedEvent.details.toLowerCase().includes('failed')) {
+                console.log('Playing failure sound for event:', updatedEvent.details);
+                setLastEventWasFailed(true);
+                
+                // Prevent double-playing by using a timeout
+                if (soundTimeoutRef.current) {
+                  clearTimeout(soundTimeoutRef.current);
+                }
+                
+                soundTimeoutRef.current = setTimeout(() => {
+                  playFailure();
+                  // Also try direct sound playing as fallback
+                  playSound('failure');
+                }, 50);
+              } else if (updatedEvent.details.toLowerCase().includes('new customer')) {
+                console.log('Playing generic sound for event:', updatedEvent.details);
+                setLastEventWasFailed(false);
+                
+                // Prevent double-playing by using a timeout
+                if (soundTimeoutRef.current) {
+                  clearTimeout(soundTimeoutRef.current);
+                }
+                
+                soundTimeoutRef.current = setTimeout(() => {
+                  playGeneric();
+                  // Also try direct sound playing as fallback
+                  playSound('generic');
+                }, 50);
+              } else {
+                console.log('Playing success sound for event:', updatedEvent.details);
+                setLastEventWasFailed(false);
+                
+                // Prevent double-playing by using a timeout
+                if (soundTimeoutRef.current) {
+                  clearTimeout(soundTimeoutRef.current);
+                }
+                
+                soundTimeoutRef.current = setTimeout(() => {
+                  playSuccess();
+                  // Also try direct sound playing as fallback
+                  playSound('success');
+                }, 50);
+              }
+            } else {
+              // If recently unpaused, just update the UI without sound
+              console.log('Skipping sound because recently unpaused');
+              setLastEventWasFailed(updatedEvent.details.toLowerCase().includes('failed'));
+              // Reset the flag after this event
+              setWasRecentlyUnpaused(false);
+            }
+            
+            // Update the UI with new events
+            setEvents(prevEvents => [updatedEvent, ...prevEvents.slice(0, 49)]);
+            
+            // Update daily revenue if this is a successful charge
+            if (updatedEvent.type === 'charge' && updatedEvent.status === 'succeeded' && 'amount' in updatedEvent) {
+              const amount = updatedEvent.amount;
+              if (amount !== undefined) {
+                const amountInUSD = 'currency' in updatedEvent && updatedEvent.currency && updatedEvent.currency !== 'USD' 
+                  ? amount * (USD_CONVERSION_RATES[updatedEvent.currency] || 1) 
+                  : amount;
+                
+                setDailyRevenue(prev => prev + amountInUSD);
+              }
+            }
+            
+            // Flash effect for new events
+            setIsFlashing(true);
+            setTimeout(() => setIsFlashing(false), 1000);
+          });
+        } else if (eventSource === 'real') {
+          loadRealEvents();
+        }
+      }, 5000);
+    }
+    
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [isPaused, eventSource, wasRecentlyUnpaused, playSuccess, playFailure, playGeneric]);
 
   // Calculate daily revenue
   useEffect(() => {
@@ -520,7 +841,7 @@ export const Events = () => {
   // Render loading state
   if (isLoading && events.length === 0) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-white">
+      <div className="h-screen w-screen flex items-center justify-center bg-white transition-opacity duration-300">
         <div className="text-center max-w-md px-6">
           <div className="text-yellow-500 text-5xl mb-6">
             {eventSource === 'real' ? '🔄' : '🧪'}
@@ -592,14 +913,14 @@ export const Events = () => {
   
   if (error && events.length === 0) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-white">
+      <div className="h-screen w-screen flex items-center justify-center bg-white transition-opacity duration-300">
         <div className="text-center">
           <div className="text-red-500 text-5xl mb-4">⚠️</div>
           <p className="text-gray-800 text-xl mb-2">Error Loading Data</p>
           <p className="text-gray-600 mb-4">{error}</p>
           <button 
             onClick={() => window.location.reload()} 
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors duration-200"
           >
             Try Again
           </button>
@@ -610,6 +931,27 @@ export const Events = () => {
 
   return (
     <div className={`min-h-screen bg-white ${isFlashing ? 'animate-flash' : ''}`}>
+      {/* Add CSS animation for flash effect */}
+      <style>
+        {`
+          @keyframes flash {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+          }
+          .animate-flash {
+            animation: flash 0.6s ease-in-out;
+          }
+          .fade-in {
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+          }
+          .fade-in.visible {
+            opacity: 1;
+          }
+        `}
+      </style>
+      
       {/* Event Source Dropdown */}
       <div className="fixed top-4 left-4 z-50">
         <div className="relative" ref={dropdownRef}>
@@ -663,18 +1005,20 @@ export const Events = () => {
         </div>
       </div>
 
-      {/* Pause Button */}
-      <button
-        onClick={() => setIsPaused(!isPaused)}
-        className="fixed top-4 right-4 z-50 p-2 rounded-full bg-white/80 backdrop-blur-sm hover:bg-white/90 transition-colors"
-        aria-label={isPaused ? "Resume" : "Pause"}
-      >
-        {isPaused ? <FaPlay size={20} className="text-gray-600" /> : <FaPause size={20} className="text-gray-600" />}
-      </button>
+      {/* Pause Button - only show in Test Events mode */}
+      {eventSource !== 'real' && (
+        <button
+          onClick={handlePauseToggle}
+          className="fixed top-4 right-4 z-50 p-2 rounded-full bg-white/80 backdrop-blur-sm hover:bg-white/90 transition-colors"
+          aria-label={isPaused ? "Resume" : "Pause"}
+        >
+          {isPaused ? <FaPlay size={20} className="text-gray-600" /> : <FaPause size={20} className="text-gray-600" />}
+        </button>
+      )}
 
       {/* Center the main content vertically and horizontally */}
       <div className="h-screen flex flex-col justify-center items-center px-5">
-        <div className="w-full max-w-[580px]">
+        <div className={`w-full max-w-[580px] fade-in ${isContentVisible ? 'visible' : ''}`}>
           <VolumeControl 
             volume={volume}
             onVolumeChange={setVolume}
@@ -684,23 +1028,23 @@ export const Events = () => {
             onSydneyMuteChange={setIsSydneyMuted}
           />
 
-          <div className={`w-full h-[320px] sm:h-[420px] rounded-3xl border-4 relative overflow-hidden ${
+          <div className={`w-full h-[320px] sm:h-[420px] rounded-3xl border-4 relative overflow-hidden transition-all duration-300 ${
             eventSource === 'real' ? 'border-gray-200' :
             events[0]?.details.toLowerCase().includes('failed') ? 'border-red-400' : 
             events[0]?.details.toLowerCase().includes('new customer') ? 'border-blue-400' : 
             'border-green-400'
           }`}>
             {eventSource === 'real' && events.length === 0 ? (
-              <div className="w-full h-full flex flex-col items-center justify-center bg-white text-gray-500 p-6 sm:p-8">
+              <div className="w-full h-full flex flex-col items-center justify-center bg-white text-gray-500 p-6 sm:p-8 transition-opacity duration-300">
                 <div className="text-yellow-500 text-5xl mb-4">⏳</div>
                 <p className="text-gray-700 text-xl font-medium mb-2">Awaiting Stripe data...</p>
                 <p className="text-gray-500 text-center max-w-md">
                   No events have been received yet. Send a test webhook from the Stripe Dashboard.
                 </p>
               </div>
-            ) : events[0] && (
+            ) : events[0] ? (
               <div
-                className={`w-full h-full p-6 sm:p-8 transition-colors duration-500 ${
+                className={`w-full h-full p-6 sm:p-8 transition-all duration-300 ${
                   getEventColors(events[0]).background
                 } ${getEventColors(events[0]).text}`}
               >
@@ -772,6 +1116,15 @@ export const Events = () => {
                     Plan: {events[0].plan} (Qty: {events[0].quantity})
                   </div>
                 )}
+              </div>
+            ) : (
+              // Fallback for when there are no events but we're not in real events mode
+              <div className="w-full h-full flex flex-col items-center justify-center bg-white text-gray-500 p-6 sm:p-8 transition-opacity duration-300">
+                <div className="text-yellow-500 text-5xl mb-4">🧪</div>
+                <p className="text-gray-700 text-xl font-medium mb-2">Loading Test Events...</p>
+                <p className="text-gray-500 text-center max-w-md">
+                  Sample events will appear shortly.
+                </p>
               </div>
             )}
           </div>

@@ -24,7 +24,7 @@ export const VolumeControl: React.FC<VolumeControlProps> = ({
   }`;
 
   return (
-    <div className="absolute bottom-4 right-4 flex flex-col items-center">
+    <div className="absolute bottom-4 right-4 flex flex-col items-center z-10">
       {/* Mute buttons stacked vertically */}
       <div className="flex flex-col items-center gap-2 mb-2">
         <button
