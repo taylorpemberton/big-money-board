@@ -139,7 +139,7 @@ export const sampleEvents: SampleEvent[] = [
     {
       type: 'charge',
       status: getRandomStatus(),
-      amount: 1290,
+      amount: 129,
       currency: 'KRW',
       countryFlag: getCountryFlag('KRW'),
       timestamp: '2023-07-20T09:54:00Z',

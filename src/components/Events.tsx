@@ -5,7 +5,7 @@ import useSound from 'use-sound';
 import { VolumeControl } from './VolumeControl';
 import { Event } from '../types/Event';
 import supersetLogo from '../assets/superset-logo.svg';
-import { FaPause, FaPlay, FaVolumeUp } from 'react-icons/fa';
+import { FaPause, FaPlay, FaVolumeUp, FaChevronDown } from 'react-icons/fa';
 import { getEventColors } from '../utils/eventStyles';
 import { formatCurrency } from '../utils/formatting';
 import { currencyToCountry, getFlagEmoji } from '../utils/flags';
@@ -24,7 +24,8 @@ const USD_CONVERSION_RATES: Record<string, number> = {
 export const Events = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [isPaused, setIsPaused] = useState(false);
-  const [showInternationalOnly, setShowInternationalOnly] = useState(false);
+  const [eventSource, setEventSource] = useState<'real' | 'test'>('test');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [lastEventWasFailed, setLastEventWasFailed] = useState(false);
   const [dailyRevenue, setDailyRevenue] = useState(0);
   const [previousDailyRevenue, setPreviousDailyRevenue] = useState(0);
@@ -64,6 +65,7 @@ export const Events = () => {
 
   const amountRef = useRef<HTMLSpanElement>(null);
   const [amountFontSize, setAmountFontSize] = useState('text-7xl sm:text-[120px]');
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Add a direct sound playing function as a fallback
   const playSound = (type: 'success' | 'failure' | 'generic') => {
@@ -118,15 +120,14 @@ export const Events = () => {
     }
   };
 
-  // Handle international toggle
-  const handleInternationalToggle = () => {
-    setShowInternationalOnly(!showInternationalOnly);
+  // Handle event source toggle
+  const handleEventSourceChange = (source: 'real' | 'test') => {
+    setEventSource(source);
+    setIsDropdownOpen(false);
+    // Clear existing events when switching sources
+    setEvents([]);
+    setIsLoading(true);
   };
-
-  // Filter events based on international toggle
-  const filteredEvents = showInternationalOnly 
-    ? events.filter(event => event.type === 'charge' && event.currency !== 'USD')
-    : events;
 
   // Save volume and mute states to localStorage
   useEffect(() => {
@@ -141,7 +142,7 @@ export const Events = () => {
     localStorage.setItem('isSydneyMuted', JSON.stringify(isSydneyMuted));
   }, [isSydneyMuted]);
 
-  // Load real events from Stripe
+  // Load events based on selected source
   useEffect(() => {
     // Function to load sample events
     const loadSampleEvents = () => {
@@ -227,20 +228,83 @@ export const Events = () => {
       }
     };
     
-    // Load events immediately
-    loadSampleEvents();
+    // Function to load real events from Stripe
+    const loadRealEvents = async () => {
+      try {
+        const realEvents = await fetchEvents();
+        if (realEvents.length > 0) {
+          // If we have new events, update the UI
+          setEvents(prevEvents => {
+            // Check if we have new events
+            if (prevEvents.length === 0 || realEvents[0].timestamp !== prevEvents[0].timestamp) {
+              // Play sound based on the latest event
+              const latestEvent = realEvents[0];
+              if (latestEvent.details.toLowerCase().includes('failed')) {
+                setLastEventWasFailed(true);
+                playFailure();
+                playSound('failure');
+              } else if (latestEvent.details.toLowerCase().includes('new customer')) {
+                setLastEventWasFailed(false);
+                playGeneric();
+                playSound('generic');
+              } else {
+                setLastEventWasFailed(false);
+                playSuccess();
+                playSound('success');
+              }
+
+              // Update daily revenue if this is a successful charge
+              if (latestEvent.type === 'charge' && latestEvent.status === 'succeeded' && 'amount' in latestEvent) {
+                const amount = latestEvent.amount;
+                if (amount !== undefined) {
+                  const amountInUSD = 'currency' in latestEvent && latestEvent.currency && latestEvent.currency !== 'USD' 
+                    ? amount * (USD_CONVERSION_RATES[latestEvent.currency] || 1) 
+                    : amount;
+                  
+                  setDailyRevenue(prev => prev + amountInUSD);
+                }
+              }
+
+              // Flash effect for new events
+              setIsFlashing(true);
+              setTimeout(() => setIsFlashing(false), 1000);
+
+              return realEvents;
+            }
+            return prevEvents;
+          });
+        }
+        setError(null);
+      } catch (err) {
+        console.error('Failed to load real events:', err);
+        setError('Failed to load real events from Stripe');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    // Load events immediately based on selected source
+    if (eventSource === 'test') {
+      loadSampleEvents();
+    } else {
+      loadRealEvents();
+    }
     
     // Set up a timer to add new events every few seconds
     const intervalId = setInterval(() => {
       if (!isPaused) {
-        loadSampleEvents();
+        if (eventSource === 'test') {
+          loadSampleEvents();
+        } else {
+          loadRealEvents();
+        }
       }
     }, 5000); // Add a new event every 5 seconds
     
     return () => {
       clearInterval(intervalId);
     };
-  }, [playSuccess, playFailure, playGeneric, isPaused, events]);
+  }, [playSuccess, playFailure, playGeneric, isPaused, events, eventSource]);
 
   // Calculate daily revenue
   useEffect(() => {
@@ -321,7 +385,7 @@ export const Events = () => {
       clearTimeout(timeoutId);
       window.removeEventListener('resize', adjustFontSize);
     };
-  }, [filteredEvents[0]?.amount, filteredEvents[0]?.currency]);
+  }, [events[0]?.amount, events[0]?.currency]);
 
   // Auto-initialize audio context on component mount
   useEffect(() => {
@@ -439,13 +503,88 @@ export const Events = () => {
     }
   }, [events.length, isPaused]); // Only re-run when events length changes or pause state changes
 
-  // Add loading and error states to your UI
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Render loading state
   if (isLoading && events.length === 0) {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading events from Stripe...</p>
+        <div className="text-center max-w-md px-6">
+          <div className="text-yellow-500 text-5xl mb-6">
+            {eventSource === 'real' ? '🔄' : '🧪'}
+          </div>
+          <h2 className="text-gray-800 text-2xl font-semibold mb-3">
+            {eventSource === 'real' 
+              ? 'Waiting for Stripe Events' 
+              : 'Loading Test Events'}
+          </h2>
+          <p className="text-gray-600 mb-6">
+            {eventSource === 'real' 
+              ? 'No events have been received yet. Send a test webhook from the Stripe Dashboard or switch to Test Events.' 
+              : 'Sample events will appear shortly. These are simulated events for demonstration purposes.'}
+          </p>
+          <div className="flex justify-center space-x-4">
+            <div className="relative">
+              <button
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className={`flex items-center justify-between w-44 px-4 py-2 rounded-lg text-base text-left whitespace-nowrap transition-all duration-200 ${
+                  isDropdownOpen 
+                    ? 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm' 
+                    : eventSource === 'real'
+                      ? 'bg-gray-100 text-gray-700 hover:bg-gray-50 font-medium border border-gray-200'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-50 font-medium border border-gray-200'
+                }`}
+              >
+                <span className="flex items-center">
+                  {isDropdownOpen ? (
+                    "Events"
+                  ) : eventSource === 'real' ? (
+                    <><span className="mr-2">🔴</span>Real Events</>
+                  ) : (
+                    <><span className="mr-2">🧪</span>Test Events</>
+                  )}
+                </span>
+                <FaChevronDown className={`ml-2 h-4 w-4 flex-shrink-0 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {isDropdownOpen && (
+                <div className="absolute mt-1 w-44 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                  <button
+                    onClick={() => handleEventSourceChange('test')}
+                    className={`w-full text-left px-4 py-2 text-base whitespace-nowrap hover:bg-gray-50 ${
+                      eventSource === 'test' ? 'bg-gray-100 text-gray-700 font-medium' : 'text-gray-700'
+                    }`}
+                  >
+                    <span className="flex items-center">
+                      <span className="mr-2">🧪</span>Test Events
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => handleEventSourceChange('real')}
+                    className={`w-full text-left px-4 py-2 text-base whitespace-nowrap hover:bg-gray-50 ${
+                      eventSource === 'real' ? 'bg-gray-100 text-gray-700 font-medium' : 'text-gray-700'
+                    }`}
+                  >
+                    <span className="flex items-center">
+                      <span className="mr-2">🔴</span>Real Events
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -469,32 +608,60 @@ export const Events = () => {
     );
   }
 
-  // Also add a check for empty events array
-  if (events.length === 0) {
-    return (
-      <div className="h-screen w-screen flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="text-yellow-500 text-5xl mb-4">⏳</div>
-          <p className="text-gray-800 text-xl mb-2">Waiting for Stripe Events</p>
-          <p className="text-gray-600 mb-4">No events have been received yet. Send a test webhook from the Stripe Dashboard.</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className={`min-h-screen bg-white ${isFlashing ? 'animate-flash' : ''}`}>
-      {/* International Toggle */}
-      <button
-        onClick={handleInternationalToggle}
-        className={`fixed -ml-2 -mt-2 top-4 left-4 z-50 px-4 py-2 rounded-lg text-base font-semibold transition-all duration-200 ${
-          showInternationalOnly 
-            ? 'bg-blue-500 text-white hover:bg-blue-600' 
-            : 'bg-white text-gray-700 hover:bg-gray-50'
-        }`}
-      >
-        {showInternationalOnly ? '🌍 Int\'l Only' : '🌎 All Events'}
-      </button>
+      {/* Event Source Dropdown */}
+      <div className="fixed top-4 left-4 z-50">
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className={`flex items-center justify-between w-44 px-4 py-2 rounded-lg text-base text-left whitespace-nowrap transition-all duration-200 ${
+              isDropdownOpen 
+                ? 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm' 
+                : eventSource === 'real'
+                  ? 'bg-gray-100 text-gray-700 hover:bg-gray-50 font-medium border border-gray-200'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-50 font-medium border border-gray-200'
+            }`}
+            aria-label="Toggle event source dropdown"
+          >
+            <span className="flex items-center">
+              {isDropdownOpen ? (
+                "Events"
+              ) : eventSource === 'real' ? (
+                <><span className="mr-2">🔴</span>Real Events</>
+              ) : (
+                <><span className="mr-2">🧪</span>Test Events</>
+              )}
+            </span>
+            <FaChevronDown className={`ml-2 h-4 w-4 flex-shrink-0 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+          
+          {isDropdownOpen && (
+            <div className="absolute mt-1 w-44 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+              <button
+                onClick={() => handleEventSourceChange('test')}
+                className={`w-full text-left px-4 py-2 text-base whitespace-nowrap hover:bg-gray-50 ${
+                  eventSource === 'test' ? 'bg-gray-100 text-gray-700 font-medium' : 'text-gray-700'
+                }`}
+              >
+                <span className="flex items-center">
+                  <span className="mr-2">🧪</span>Test Events
+                </span>
+              </button>
+              <button
+                onClick={() => handleEventSourceChange('real')}
+                className={`w-full text-left px-4 py-2 text-base whitespace-nowrap hover:bg-gray-50 ${
+                  eventSource === 'real' ? 'bg-gray-100 text-gray-700 font-medium' : 'text-gray-700'
+                }`}
+              >
+                <span className="flex items-center">
+                  <span className="mr-2">🔴</span>Real Events
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Pause Button */}
       <button
@@ -518,33 +685,42 @@ export const Events = () => {
           />
 
           <div className={`w-full h-[320px] sm:h-[420px] rounded-3xl border-4 relative overflow-hidden ${
-            filteredEvents[0]?.details.toLowerCase().includes('failed') ? 'border-red-400' : 
-            filteredEvents[0]?.details.toLowerCase().includes('new customer') ? 'border-blue-400' : 
+            eventSource === 'real' ? 'border-gray-200' :
+            events[0]?.details.toLowerCase().includes('failed') ? 'border-red-400' : 
+            events[0]?.details.toLowerCase().includes('new customer') ? 'border-blue-400' : 
             'border-green-400'
           }`}>
-            {filteredEvents[0] && (
+            {eventSource === 'real' && events.length === 0 ? (
+              <div className="w-full h-full flex flex-col items-center justify-center bg-white text-gray-500 p-6 sm:p-8">
+                <div className="text-yellow-500 text-5xl mb-4">⏳</div>
+                <p className="text-gray-700 text-xl font-medium mb-2">Awaiting Stripe data...</p>
+                <p className="text-gray-500 text-center max-w-md">
+                  No events have been received yet. Send a test webhook from the Stripe Dashboard.
+                </p>
+              </div>
+            ) : events[0] && (
               <div
                 className={`w-full h-full p-6 sm:p-8 transition-colors duration-500 ${
-                  getEventColors(filteredEvents[0]).background
-                } ${getEventColors(filteredEvents[0]).text}`}
+                  getEventColors(events[0]).background
+                } ${getEventColors(events[0]).text}`}
               >
                 <div className="flex flex-col">
-                  <span className="font-medium text-xl sm:text-xl">{filteredEvents[0].details}</span>
-                  {filteredEvents[0].amount ? (
+                  <span className="font-medium text-xl sm:text-xl">{events[0].details}</span>
+                  {events[0].amount ? (
                     <div className="flex flex-col">
                       <span 
                         ref={amountRef}
                         className={`font-semibold mt-4 sm:mt-6 transition-none ${amountFontSize}`}
                       >
-                        {formatCurrency(filteredEvents[0].amount, filteredEvents[0].currency || 'USD')}
+                        {formatCurrency(events[0].amount, events[0].currency || 'USD')}
                       </span>
-                      {filteredEvents[0].currency && filteredEvents[0].currency !== 'USD' && (
+                      {events[0].currency && events[0].currency !== 'USD' && (
                         <span className={`text-gray-500 ${
-                          formatCurrency(filteredEvents[0].amount * (USD_CONVERSION_RATES[filteredEvents[0].currency] || 1), 'USD').length > 15
+                          formatCurrency(events[0].amount * (USD_CONVERSION_RATES[events[0].currency] || 1), 'USD').length > 15
                             ? 'text-lg sm:text-xl'
                             : 'text-xl sm:text-2xl'
                         }`}>
-                          {formatCurrency(filteredEvents[0].amount * (USD_CONVERSION_RATES[filteredEvents[0].currency] || 1), 'USD')} USD
+                          {formatCurrency(events[0].amount * (USD_CONVERSION_RATES[events[0].currency] || 1), 'USD')} USD
                         </span>
                       )}
                     </div>
@@ -556,7 +732,7 @@ export const Events = () => {
                 {/* Date and time in bottom left */}
                 <div className="absolute bottom-6 sm:bottom-8 left-6 sm:left-8 flex flex-col sm:flex-row gap-1 sm:gap-2 text-sm sm:text-base">
                   <div>
-                    {new Date(filteredEvents[0].timestamp).toLocaleTimeString('en-US', {
+                    {new Date(events[0].timestamp).toLocaleTimeString('en-US', {
                       hour: 'numeric',
                       minute: '2-digit',
                       hour12: true
@@ -564,7 +740,7 @@ export const Events = () => {
                   </div>
                   •
                   <div>
-                    {new Date(filteredEvents[0].timestamp).toLocaleDateString('en-US', {
+                    {new Date(events[0].timestamp).toLocaleDateString('en-US', {
                       month: 'long',
                       day: 'numeric',
                       year: 'numeric'
@@ -573,27 +749,27 @@ export const Events = () => {
                 </div>
 
                 {/* Country flag in bottom right */}
-                {(filteredEvents[0]?.country || filteredEvents[0]?.currency || filteredEvents[0]?.details.toLowerCase().includes('new customer')) && (
+                {(events[0]?.country || events[0]?.currency || events[0]?.details.toLowerCase().includes('new customer')) && (
                   <div className="absolute bottom-6 sm:bottom-8 right-6 sm:right-8">
                     <span className="text-6xl leading-[60px] block h-[60px]">
-                      {filteredEvents[0].details.toLowerCase().includes('new customer')
+                      {events[0].details.toLowerCase().includes('new customer')
                         ? '🇺🇸'
-                        : filteredEvents[0].country 
-                          ? getFlagEmoji(filteredEvents[0].country)
-                          : filteredEvents[0].currency === 'USD' 
+                        : events[0].country 
+                          ? getFlagEmoji(events[0].country)
+                          : events[0].currency === 'USD' 
                             ? '🇺🇸'
-                            : currencyToCountry[filteredEvents[0].currency as keyof typeof currencyToCountry]?.flag || '🌍'
+                            : currencyToCountry[events[0].currency as keyof typeof currencyToCountry]?.flag || '🌍'
                       }
                     </span>
                   </div>
                 )}
 
-                {filteredEvents[0].email && (
-                  <div className="mt-4 sm:mt-5 text-base sm:text-lg">{filteredEvents[0].email}</div>
+                {events[0].email && (
+                  <div className="mt-4 sm:mt-5 text-base sm:text-lg">{events[0].email}</div>
                 )}
-                {filteredEvents[0].plan && (
+                {events[0].plan && (
                   <div className="mt-4 sm:mt-5 text-base sm:text-lg">
-                    Plan: {filteredEvents[0].plan} (Qty: {filteredEvents[0].quantity})
+                    Plan: {events[0].plan} (Qty: {events[0].quantity})
                   </div>
                 )}
               </div>
@@ -601,7 +777,7 @@ export const Events = () => {
           </div>
           
           {/* Updated splash animation */}
-          <style>{getSplashAnimation(filteredEvents[0])}</style>
+          <style>{getSplashAnimation(events[0])}</style>
         </div>
         
         {/* Powered by footer */}

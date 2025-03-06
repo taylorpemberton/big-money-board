@@ -61,7 +61,7 @@ export const VolumeControl: React.FC<VolumeControlProps> = ({
             step="0.01"
             value={volume}
             onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-            className="h-24 w-1 bg-gray-300 rounded-lg appearance-none cursor-pointer"
+            className="h-24 w-2 bg-gray-300 rounded-lg appearance-none cursor-pointer"
             style={{
               WebkitAppearance: 'slider-vertical',
               writingMode: 'vertical-rl',
