@@ -5,12 +5,13 @@ import useSound from 'use-sound';
 import { VolumeControl } from './VolumeControl';
 import { Event } from '../types/Event';
 import supersetLogo from '../assets/superset-logo.svg';
-import { FaPause, FaPlay, FaVolumeUp, FaChevronDown } from 'react-icons/fa';
+import { FaPause, FaPlay, FaVolumeUp, FaChevronDown, FaStepForward, FaStepBackward } from 'react-icons/fa';
 import { getEventColors } from '../utils/eventStyles';
 import { formatCurrency } from '../utils/formatting';
 import { currencyToCountry, getFlagEmoji } from '../utils/flags';
 import { getSplashAnimation } from '../utils/animations';
 import { fetchEvents } from '../api/stripeApi';
+import { getNextTestEvent, getPreviousTestEvent } from '../utils/dataSource';
 
 const USD_CONVERSION_RATES: Record<string, number> = {
   EUR: 1.08,
@@ -124,6 +125,86 @@ export const Events = () => {
         setWasRecentlyUnpaused(false);
       }, 5000); // Match with the event interval
     }
+  };
+
+  // Handle next event (manually add a predefined test event)
+  const handleNextEvent = () => {
+    // Get the next predefined test event
+    const nextEvent = getNextTestEvent();
+    
+    // Add it to the events list
+    setEvents(prevEvents => [nextEvent, ...prevEvents.slice(0, 49)]);
+    
+    // Update daily revenue if this is a successful charge
+    if (nextEvent.type === 'charge' && nextEvent.status === 'succeeded' && 'amount' in nextEvent) {
+      const amount = nextEvent.amount;
+      if (amount !== undefined) {
+        const amountInUSD = 'currency' in nextEvent && nextEvent.currency && nextEvent.currency !== 'USD' 
+          ? amount * (USD_CONVERSION_RATES[nextEvent.currency] || 1) 
+          : amount;
+        
+        setDailyRevenue(prev => prev + amountInUSD);
+      }
+    }
+    
+    // Play sound based on event type
+    if (nextEvent.details.toLowerCase().includes('failed')) {
+      setLastEventWasFailed(true);
+      playFailure();
+      playSound('failure');
+    } else if (nextEvent.details.toLowerCase().includes('new customer')) {
+      setLastEventWasFailed(false);
+      playGeneric();
+      playSound('generic');
+    } else {
+      setLastEventWasFailed(false);
+      playSuccess();
+      playSound('success');
+    }
+    
+    // Flash effect for new events
+    setIsFlashing(true);
+    setTimeout(() => setIsFlashing(false), 1000);
+  };
+
+  // Handle previous event (manually add a predefined test event)
+  const handlePreviousEvent = () => {
+    // Get the previous predefined test event
+    const prevEvent = getPreviousTestEvent();
+    
+    // Add it to the events list
+    setEvents(prevEvents => [prevEvent, ...prevEvents.slice(0, 49)]);
+    
+    // Update daily revenue if this is a successful charge
+    if (prevEvent.type === 'charge' && prevEvent.status === 'succeeded' && 'amount' in prevEvent) {
+      const amount = prevEvent.amount;
+      if (amount !== undefined) {
+        const amountInUSD = 'currency' in prevEvent && prevEvent.currency && prevEvent.currency !== 'USD' 
+          ? amount * (USD_CONVERSION_RATES[prevEvent.currency] || 1) 
+          : amount;
+        
+        setDailyRevenue(prev => prev + amountInUSD);
+      }
+    }
+    
+    // Play sound based on event type
+    if (prevEvent.details.toLowerCase().includes('failed')) {
+      setLastEventWasFailed(true);
+      playFailure();
+      playSound('failure');
+    } else if (prevEvent.details.toLowerCase().includes('new customer')) {
+      setLastEventWasFailed(false);
+      playGeneric();
+      playSound('generic');
+    } else {
+      setLastEventWasFailed(false);
+      playSuccess();
+      playSound('success');
+    }
+    
+    // Flash effect for new events
+    setIsFlashing(true);
+    setTimeout(() => setIsFlashing(false), 1000);
   };
 
   // Handle event source toggle
@@ -437,195 +518,6 @@ export const Events = () => {
       }
     };
   }, [playSuccess, playFailure, playGeneric, wasRecentlyUnpaused, eventSource]); // Remove isPaused and events from dependencies
-
-  // Handle pause/unpause separately to avoid reloading events
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
-    
-    // Define loadRealEvents function for this effect
-    const loadRealEvents = async () => {
-      try {
-        const realEvents = await fetchEvents();
-        
-        if (realEvents.length > 0) {
-          // If we have new events, update the UI
-          setEvents(prevEvents => {
-            // Check if we have new events
-            if (prevEvents.length === 0 || realEvents[0].timestamp !== prevEvents[0].timestamp) {
-              // Play sound based on the latest event, but only if not recently unpaused
-              if (!wasRecentlyUnpaused) {
-                const latestEvent = realEvents[0];
-                if (latestEvent.details.toLowerCase().includes('failed')) {
-                  setLastEventWasFailed(true);
-                  
-                  // Prevent double-playing by using a timeout
-                  if (soundTimeoutRef.current) {
-                    clearTimeout(soundTimeoutRef.current);
-                  }
-                  
-                  soundTimeoutRef.current = setTimeout(() => {
-                    playFailure();
-                    playSound('failure');
-                  }, 50);
-                } else if (latestEvent.details.toLowerCase().includes('new customer')) {
-                  setLastEventWasFailed(false);
-                  
-                  // Prevent double-playing by using a timeout
-                  if (soundTimeoutRef.current) {
-                    clearTimeout(soundTimeoutRef.current);
-                  }
-                  
-                  soundTimeoutRef.current = setTimeout(() => {
-                    playGeneric();
-                    playSound('generic');
-                  }, 50);
-                } else {
-                  setLastEventWasFailed(false);
-                  
-                  // Prevent double-playing by using a timeout
-                  if (soundTimeoutRef.current) {
-                    clearTimeout(soundTimeoutRef.current);
-                  }
-                  
-                  soundTimeoutRef.current = setTimeout(() => {
-                    playSuccess();
-                    playSound('success');
-                  }, 50);
-                }
-              } else {
-                // If recently unpaused, just update the UI without sound
-                console.log('Skipping sound because recently unpaused');
-                setLastEventWasFailed(realEvents[0].details.toLowerCase().includes('failed'));
-                // Reset the flag after this event
-                setWasRecentlyUnpaused(false);
-              }
-
-              // Update daily revenue if this is a successful charge
-              if (realEvents[0].type === 'charge' && realEvents[0].status === 'succeeded' && 'amount' in realEvents[0]) {
-                const amount = realEvents[0].amount;
-                if (amount !== undefined) {
-                  const amountInUSD = 'currency' in realEvents[0] && realEvents[0].currency && realEvents[0].currency !== 'USD' 
-                    ? amount * (USD_CONVERSION_RATES[realEvents[0].currency] || 1) 
-                    : amount;
-                  
-                  setDailyRevenue(prev => prev + amountInUSD);
-                }
-              }
-
-              // Flash effect for new events
-              setIsFlashing(true);
-              setTimeout(() => setIsFlashing(false), 1000);
-
-              return realEvents;
-            }
-            return prevEvents;
-          });
-        }
-      } catch (err) {
-        console.error('Failed to load real events:', err);
-      }
-    };
-    
-    // If not paused, start the timer
-    if (!isPaused && eventSource === 'test') {
-      intervalId = setInterval(() => {
-        if (eventSource === 'test') {
-          // Import sample data
-          import('../data/sampleData').then(({ sampleEvents }) => {
-            // Get a random event from the sample data
-            const randomIndex = Math.floor(Math.random() * sampleEvents.length);
-            const randomEvent = sampleEvents[randomIndex];
-            
-            // Update the timestamp to now
-            const updatedEvent = {
-              ...randomEvent,
-              timestamp: new Date().toISOString()
-            };
-            
-            // Play sound based on event type, but only if not recently unpaused
-            if (!wasRecentlyUnpaused) {
-              if (updatedEvent.details.toLowerCase().includes('failed')) {
-                console.log('Playing failure sound for event:', updatedEvent.details);
-                setLastEventWasFailed(true);
-                
-                // Prevent double-playing by using a timeout
-                if (soundTimeoutRef.current) {
-                  clearTimeout(soundTimeoutRef.current);
-                }
-                
-                soundTimeoutRef.current = setTimeout(() => {
-                  playFailure();
-                  // Also try direct sound playing as fallback
-                  playSound('failure');
-                }, 50);
-              } else if (updatedEvent.details.toLowerCase().includes('new customer')) {
-                console.log('Playing generic sound for event:', updatedEvent.details);
-                setLastEventWasFailed(false);
-                
-                // Prevent double-playing by using a timeout
-                if (soundTimeoutRef.current) {
-                  clearTimeout(soundTimeoutRef.current);
-                }
-                
-                soundTimeoutRef.current = setTimeout(() => {
-                  playGeneric();
-                  // Also try direct sound playing as fallback
-                  playSound('generic');
-                }, 50);
-              } else {
-                console.log('Playing success sound for event:', updatedEvent.details);
-                setLastEventWasFailed(false);
-                
-                // Prevent double-playing by using a timeout
-                if (soundTimeoutRef.current) {
-                  clearTimeout(soundTimeoutRef.current);
-                }
-                
-                soundTimeoutRef.current = setTimeout(() => {
-                  playSuccess();
-                  // Also try direct sound playing as fallback
-                  playSound('success');
-                }, 50);
-              }
-            } else {
-              // If recently unpaused, just update the UI without sound
-              console.log('Skipping sound because recently unpaused');
-              setLastEventWasFailed(updatedEvent.details.toLowerCase().includes('failed'));
-              // Reset the flag after this event
-              setWasRecentlyUnpaused(false);
-            }
-            
-            // Update the UI with new events
-            setEvents(prevEvents => [updatedEvent, ...prevEvents.slice(0, 49)]);
-            
-            // Update daily revenue if this is a successful charge
-            if (updatedEvent.type === 'charge' && updatedEvent.status === 'succeeded' && 'amount' in updatedEvent) {
-              const amount = updatedEvent.amount;
-              if (amount !== undefined) {
-                const amountInUSD = 'currency' in updatedEvent && updatedEvent.currency && updatedEvent.currency !== 'USD' 
-                  ? amount * (USD_CONVERSION_RATES[updatedEvent.currency] || 1) 
-                  : amount;
-                
-                setDailyRevenue(prev => prev + amountInUSD);
-              }
-            }
-            
-            // Flash effect for new events
-            setIsFlashing(true);
-            setTimeout(() => setIsFlashing(false), 1000);
-          });
-        } else if (eventSource === 'real') {
-          loadRealEvents();
-        }
-      }, 5000);
-    }
-    
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [isPaused, eventSource, wasRecentlyUnpaused, playSuccess, playFailure, playGeneric]);
 
   // Calculate daily revenue
   useEffect(() => {
@@ -1005,15 +897,38 @@ export const Events = () => {
         </div>
       </div>
 
-      {/* Pause Button - only show in Test Events mode */}
+      {/* Playback Controls - only show in Test Events mode */}
       {eventSource !== 'real' && (
-        <button
-          onClick={handlePauseToggle}
-          className="fixed top-4 right-4 z-50 p-2 rounded-full bg-white/80 backdrop-blur-sm hover:bg-white/90 transition-colors"
-          aria-label={isPaused ? "Resume" : "Pause"}
-        >
-          {isPaused ? <FaPlay size={20} className="text-gray-600" /> : <FaPause size={20} className="text-gray-600" />}
-        </button>
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+          {/* Pause/Play Button */}
+          <button
+            onClick={handlePauseToggle}
+            className="p-2 rounded-full bg-white/80 backdrop-blur-sm hover:bg-white/90 transition-colors"
+            aria-label={isPaused ? "Resume" : "Pause"}
+          >
+            {isPaused ? <FaPlay size={20} className="text-gray-600" /> : <FaPause size={20} className="text-gray-600" />}
+          </button>
+          
+          {/* Back Event Button */}
+          <button
+            onClick={handlePreviousEvent}
+            className="p-2 rounded-full bg-white/80 backdrop-blur-sm hover:bg-white/90 transition-colors"
+            aria-label="Previous Event"
+            title="Show previous predefined event"
+          >
+            <FaStepBackward size={20} className="text-gray-600" />
+          </button>
+          
+          {/* Next Event Button */}
+          <button
+            onClick={handleNextEvent}
+            className="p-2 rounded-full bg-white/80 backdrop-blur-sm hover:bg-white/90 transition-colors"
+            aria-label="Next Event"
+            title="Show next predefined event"
+          >
+            <FaStepForward size={20} className="text-gray-600" />
+          </button>
+        </div>
       )}
 
       {/* Center the main content vertically and horizontally */}
@@ -1058,7 +973,7 @@ export const Events = () => {
                       >
                         {formatCurrency(events[0].amount, events[0].currency || 'USD')}
                       </span>
-                      {events[0].currency && events[0].currency !== 'USD' && (
+                      {events[0].currency && events[0].currency.toLowerCase() !== 'usd' && (
                         <span className={`text-gray-500 ${
                           formatCurrency(events[0].amount * (USD_CONVERSION_RATES[events[0].currency] || 1), 'USD').length > 15
                             ? 'text-lg sm:text-xl'
