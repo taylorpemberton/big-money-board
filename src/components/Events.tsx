@@ -12,6 +12,9 @@ import { currencyToCountry, getFlagEmoji } from '../utils/flags';
 import { getSplashAnimation } from '../utils/animations';
 import { fetchEvents } from '../api/stripeApi';
 import { getNextTestEvent, getPreviousTestEvent } from '../utils/dataSource';
+import { WorldMap } from './WorldMap';
+import { Revenue } from './Revenue';
+import { MAP_CONFIG } from './WorldMap';
 
 const USD_CONVERSION_RATES: Record<string, number> = {
   EUR: 1.08,
@@ -26,11 +29,12 @@ export const Events = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [isPaused, setIsPaused] = useState(false);
   const [eventSource, setEventSource] = useState<'real' | 'test'>('test');
+  const [currentView, setCurrentView] = useState<'stream' | 'map'>('stream');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [lastEventWasFailed, setLastEventWasFailed] = useState(false);
   const [dailyRevenue, setDailyRevenue] = useState(0);
   const [previousDailyRevenue, setPreviousDailyRevenue] = useState(0);
-  const [revenueChangeType, setRevenueChangeType] = useState<'increase' | 'decrease' | null>(null);
+  const [revenueChangeType, setRevenueChangeType] = useState<'increase' | 'decrease' | 'neutral'>('neutral');
   const [volume, setVolume] = useState(() => {
     const savedVolume = localStorage.getItem('volume');
     return savedVolume ? parseFloat(savedVolume) : 0.5;
@@ -527,7 +531,7 @@ export const Events = () => {
       if (now.getHours() === 0 && now.getMinutes() === 0) {
         setPreviousDailyRevenue(0);
         setDailyRevenue(0);
-        setRevenueChangeType(null);
+        setRevenueChangeType('neutral');
       }
     };
 
@@ -541,10 +545,10 @@ export const Events = () => {
   useEffect(() => {
     if (dailyRevenue > previousDailyRevenue) {
       setRevenueChangeType('increase');
-      setTimeout(() => setRevenueChangeType(null), 1500);
+      setTimeout(() => setRevenueChangeType('neutral'), 1500);
     } else if (dailyRevenue < previousDailyRevenue) {
       setRevenueChangeType('decrease');
-      setTimeout(() => setRevenueChangeType(null), 1500);
+      setTimeout(() => setRevenueChangeType('neutral'), 1500);
     }
     
     setPreviousDailyRevenue(dailyRevenue);
@@ -852,7 +856,9 @@ export const Events = () => {
             className={`flex items-center justify-between w-44 px-4 py-2 rounded-lg text-base text-left whitespace-nowrap transition-all duration-200 ${
               isDropdownOpen 
                 ? 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm' 
-                : eventSource === 'real'
+                : currentView === 'map' ? (
+                  <><span className="mr-2">🗺️</span>World Map</>
+                ) : eventSource === 'real'
                   ? 'bg-gray-100 text-gray-700 hover:bg-gray-50 font-medium border border-gray-200'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-50 font-medium border border-gray-200'
             }`}
@@ -860,7 +866,9 @@ export const Events = () => {
           >
             <span className="flex items-center">
               {isDropdownOpen ? (
-                "Events"
+                "Options"
+              ) : currentView === 'map' ? (
+                <><span className="mr-2">🗺️</span>World Map</>
               ) : eventSource === 'real' ? (
                 <><span className="mr-2">🔴</span>Real Events</>
               ) : (
@@ -872,26 +880,57 @@ export const Events = () => {
           
           {isDropdownOpen && (
             <div className="absolute mt-1 w-44 bg-white border border-gray-200 rounded-md shadow-lg z-50">
-              <button
-                onClick={() => handleEventSourceChange('test')}
-                className={`w-full text-left px-4 py-2 text-base whitespace-nowrap hover:bg-gray-50 ${
-                  eventSource === 'test' ? 'bg-gray-100 text-gray-700 font-medium' : 'text-gray-700'
-                }`}
-              >
-                <span className="flex items-center">
-                  <span className="mr-2">🧪</span>Test Events
-                </span>
-              </button>
-              <button
-                onClick={() => handleEventSourceChange('real')}
-                className={`w-full text-left px-4 py-2 text-base whitespace-nowrap hover:bg-gray-50 ${
-                  eventSource === 'real' ? 'bg-gray-100 text-gray-700 font-medium' : 'text-gray-700'
-                }`}
-              >
-                <span className="flex items-center">
-                  <span className="mr-2">🔴</span>Real Events
-                </span>
-              </button>
+              <div className="py-1 border-b border-gray-100">
+                <div className="px-3 py-1 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Data Source
+                </div>
+                <button
+                  onClick={() => handleEventSourceChange('test')}
+                  className={`w-full text-left px-4 py-2 text-base whitespace-nowrap hover:bg-gray-50 ${
+                    eventSource === 'test' ? 'bg-gray-100 text-gray-700 font-medium' : 'text-gray-700'
+                  }`}
+                >
+                  <span className="flex items-center">
+                    <span className="mr-2">🧪</span>Test Events
+                  </span>
+                </button>
+                <button
+                  onClick={() => handleEventSourceChange('real')}
+                  className={`w-full text-left px-4 py-2 text-base whitespace-nowrap hover:bg-gray-50 ${
+                    eventSource === 'real' ? 'bg-gray-100 text-gray-700 font-medium' : 'text-gray-700'
+                  }`}
+                >
+                  <span className="flex items-center">
+                    <span className="mr-2">🔴</span>Real Events
+                  </span>
+                </button>
+              </div>
+              
+              <div className="py-1">
+                <div className="px-3 py-1 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  View
+                </div>
+                <button
+                  onClick={() => setCurrentView('stream')}
+                  className={`w-full text-left px-4 py-2 text-base whitespace-nowrap hover:bg-gray-50 ${
+                    currentView === 'stream' ? 'bg-gray-100 text-gray-700 font-medium' : 'text-gray-700'
+                  }`}
+                >
+                  <span className="flex items-center">
+                    <span className="mr-2">📊</span>Event Stream
+                  </span>
+                </button>
+                <button
+                  onClick={() => setCurrentView('map')}
+                  className={`w-full text-left px-4 py-2 text-base whitespace-nowrap hover:bg-gray-50 ${
+                    currentView === 'map' ? 'bg-gray-100 text-gray-700 font-medium' : 'text-gray-700'
+                  }`}
+                >
+                  <span className="flex items-center">
+                    <span className="mr-2">🗺️</span>World Map
+                  </span>
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -932,8 +971,124 @@ export const Events = () => {
       )}
 
       {/* Center the main content vertically and horizontally */}
-      <div className="h-screen flex flex-col justify-center items-center px-5">
-        <div className={`w-full max-w-[580px] fade-in ${isContentVisible ? 'visible' : ''}`}>
+      <div className={`h-screen flex flex-col justify-center items-center ${currentView === 'map' ? 'pointer-events-none' : ''}`}>
+        {currentView === 'stream' ? (
+          <div className={`w-full fade-in ${isContentVisible ? 'visible' : ''}`}
+               style={{ maxWidth: '580px' }}>
+            {/* Event Stream View - Original UI */}
+            <div className={`w-full h-[320px] sm:h-[420px] rounded-3xl border-4 relative overflow-hidden transition-all duration-300 ${
+              eventSource === 'real' ? 'border-gray-200' :
+              events[0]?.details.toLowerCase().includes('failed') ? 'border-red-400' : 
+              events[0]?.details.toLowerCase().includes('new customer') ? 'border-blue-400' : 
+              'border-green-400'
+            }`}>
+              {eventSource === 'real' && events.length === 0 ? (
+                <div className="w-full h-full flex flex-col items-center justify-center bg-white text-gray-500 p-6 sm:p-8 transition-opacity duration-300">
+                  <div className="text-yellow-500 text-5xl mb-4">⏳</div>
+                  <p className="text-gray-700 text-xl font-medium mb-2">Awaiting Stripe data...</p>
+                  <p className="text-gray-500 text-center max-w-md">
+                    No events have been received yet. Send a test webhook from the Stripe Dashboard.
+                  </p>
+                </div>
+              ) : events[0] ? (
+                <div
+                  className={`w-full h-full p-6 sm:p-8 transition-all duration-300 ${
+                    getEventColors(events[0]).background
+                  } ${getEventColors(events[0]).text}`}
+                >
+                  <div className="flex flex-col">
+                    <span className="font-medium text-xl sm:text-xl">{events[0].details}</span>
+                    {events[0].amount ? (
+                      <div className="flex flex-col">
+                        <span 
+                          ref={amountRef}
+                          className={`font-semibold mt-4 sm:mt-6 transition-none ${amountFontSize}`}
+                        >
+                          {formatCurrency(events[0].amount, events[0].currency || 'USD')}
+                        </span>
+                        {events[0].currency && events[0].currency.toLowerCase() !== 'usd' && (
+                          <span className={`text-gray-500 ${
+                            formatCurrency(events[0].amount * (USD_CONVERSION_RATES[events[0].currency] || 1), 'USD').length > 15
+                              ? 'text-lg sm:text-xl'
+                              : 'text-xl sm:text-2xl'
+                          }`}>
+                            {formatCurrency(events[0].amount * (USD_CONVERSION_RATES[events[0].currency] || 1), 'USD')} USD
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-7xl sm:text-[120px] font-semibold mt-4 sm:mt-6">😃</span>
+                    )}
+                  </div>
+
+                  {/* Date and time in bottom left */}
+                  <div className="absolute bottom-6 sm:bottom-8 left-6 sm:left-8 flex flex-col sm:flex-row gap-1 sm:gap-2 text-sm sm:text-base">
+                    <div>
+                      {new Date(events[0].timestamp).toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                      })}
+                    </div>
+                    •
+                    <div>
+                      {new Date(events[0].timestamp).toLocaleDateString('en-US', {
+                        month: 'long',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Country flag in bottom right */}
+                  {(events[0]?.country || events[0]?.currency || events[0]?.details.toLowerCase().includes('new customer')) && (
+                    <div className="absolute bottom-6 sm:bottom-8 right-6 sm:right-8">
+                      <span className="text-6xl leading-[60px] block h-[60px]">
+                        {events[0].details.toLowerCase().includes('new customer')
+                          ? '🇺🇸'
+                          : events[0].country 
+                            ? getFlagEmoji(events[0].country)
+                            : events[0].currency === 'USD' 
+                              ? '🇺🇸'
+                              : currencyToCountry[events[0].currency as keyof typeof currencyToCountry]?.flag || '🌍'
+                        }
+                      </span>
+                    </div>
+                  )}
+
+                  {events[0].email && (
+                    <div className="mt-4 sm:mt-5 text-base sm:text-lg">{events[0].email}</div>
+                  )}
+                  {events[0].plan && (
+                    <div className="mt-4 sm:mt-5 text-base sm:text-lg">
+                      Plan: {events[0].plan} (Qty: {events[0].quantity})
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // Fallback for when there are no events but we're not in real events mode
+                <div className="w-full h-full flex flex-col items-center justify-center bg-white text-gray-500 p-6 sm:p-8 transition-opacity duration-300">
+                  <div className="text-yellow-500 text-5xl mb-4">🧪</div>
+                  <p className="text-gray-700 text-xl font-medium mb-2">Loading Test Events...</p>
+                  <p className="text-gray-500 text-center max-w-md">
+                    Sample events will appear shortly.
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            {/* Updated splash animation - only for stream view */}
+            <style>{getSplashAnimation(events[0])}</style>
+          </div>
+        ) : (
+          /* World Map View - Direct component with no container */
+          <div className="pointer-events-auto">
+            <WorldMap events={events} isPaused={isPaused} />
+          </div>
+        )}
+        
+        {/* Volume Control - Bottom Right */}
+        <div className="fixed bottom-6 right-6 z-40">
           <VolumeControl 
             volume={volume}
             onVolumeChange={setVolume}
@@ -942,142 +1097,31 @@ export const Events = () => {
             isSydneyMuted={isSydneyMuted}
             onSydneyMuteChange={setIsSydneyMuted}
           />
-
-          <div className={`w-full h-[320px] sm:h-[420px] rounded-3xl border-4 relative overflow-hidden transition-all duration-300 ${
-            eventSource === 'real' ? 'border-gray-200' :
-            events[0]?.details.toLowerCase().includes('failed') ? 'border-red-400' : 
-            events[0]?.details.toLowerCase().includes('new customer') ? 'border-blue-400' : 
-            'border-green-400'
-          }`}>
-            {eventSource === 'real' && events.length === 0 ? (
-              <div className="w-full h-full flex flex-col items-center justify-center bg-white text-gray-500 p-6 sm:p-8 transition-opacity duration-300">
-                <div className="text-yellow-500 text-5xl mb-4">⏳</div>
-                <p className="text-gray-700 text-xl font-medium mb-2">Awaiting Stripe data...</p>
-                <p className="text-gray-500 text-center max-w-md">
-                  No events have been received yet. Send a test webhook from the Stripe Dashboard.
-                </p>
-              </div>
-            ) : events[0] ? (
-              <div
-                className={`w-full h-full p-6 sm:p-8 transition-all duration-300 ${
-                  getEventColors(events[0]).background
-                } ${getEventColors(events[0]).text}`}
-              >
-                <div className="flex flex-col">
-                  <span className="font-medium text-xl sm:text-xl">{events[0].details}</span>
-                  {events[0].amount ? (
-                    <div className="flex flex-col">
-                      <span 
-                        ref={amountRef}
-                        className={`font-semibold mt-4 sm:mt-6 transition-none ${amountFontSize}`}
-                      >
-                        {formatCurrency(events[0].amount, events[0].currency || 'USD')}
-                      </span>
-                      {events[0].currency && events[0].currency.toLowerCase() !== 'usd' && (
-                        <span className={`text-gray-500 ${
-                          formatCurrency(events[0].amount * (USD_CONVERSION_RATES[events[0].currency] || 1), 'USD').length > 15
-                            ? 'text-lg sm:text-xl'
-                            : 'text-xl sm:text-2xl'
-                        }`}>
-                          {formatCurrency(events[0].amount * (USD_CONVERSION_RATES[events[0].currency] || 1), 'USD')} USD
-                        </span>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-7xl sm:text-[120px] font-semibold mt-4 sm:mt-6">😃</span>
-                  )}
-                </div>
-
-                {/* Date and time in bottom left */}
-                <div className="absolute bottom-6 sm:bottom-8 left-6 sm:left-8 flex flex-col sm:flex-row gap-1 sm:gap-2 text-sm sm:text-base">
-                  <div>
-                    {new Date(events[0].timestamp).toLocaleTimeString('en-US', {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                      hour12: true
-                    })}
-                  </div>
-                  •
-                  <div>
-                    {new Date(events[0].timestamp).toLocaleDateString('en-US', {
-                      month: 'long',
-                      day: 'numeric',
-                      year: 'numeric'
-                    })}
-                  </div>
-                </div>
-
-                {/* Country flag in bottom right */}
-                {(events[0]?.country || events[0]?.currency || events[0]?.details.toLowerCase().includes('new customer')) && (
-                  <div className="absolute bottom-6 sm:bottom-8 right-6 sm:right-8">
-                    <span className="text-6xl leading-[60px] block h-[60px]">
-                      {events[0].details.toLowerCase().includes('new customer')
-                        ? '🇺🇸'
-                        : events[0].country 
-                          ? getFlagEmoji(events[0].country)
-                          : events[0].currency === 'USD' 
-                            ? '🇺🇸'
-                            : currencyToCountry[events[0].currency as keyof typeof currencyToCountry]?.flag || '🌍'
-                      }
-                    </span>
-                  </div>
-                )}
-
-                {events[0].email && (
-                  <div className="mt-4 sm:mt-5 text-base sm:text-lg">{events[0].email}</div>
-                )}
-                {events[0].plan && (
-                  <div className="mt-4 sm:mt-5 text-base sm:text-lg">
-                    Plan: {events[0].plan} (Qty: {events[0].quantity})
-                  </div>
-                )}
-              </div>
-            ) : (
-              // Fallback for when there are no events but we're not in real events mode
-              <div className="w-full h-full flex flex-col items-center justify-center bg-white text-gray-500 p-6 sm:p-8 transition-opacity duration-300">
-                <div className="text-yellow-500 text-5xl mb-4">🧪</div>
-                <p className="text-gray-700 text-xl font-medium mb-2">Loading Test Events...</p>
-                <p className="text-gray-500 text-center max-w-md">
-                  Sample events will appear shortly.
-                </p>
-              </div>
-            )}
-          </div>
-          
-          {/* Updated splash animation */}
-          <style>{getSplashAnimation(events[0])}</style>
         </div>
         
-        {/* Powered by footer */}
-        <div className="fixed bottom-8 left-0 right-0 flex justify-center items-center gap-2">
-          <span className="text-xs text-gray-500">Powered by</span>
+        {/* Powered by footer - Bottom Center */}
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 flex items-center justify-center text-gray-500 text-sm z-10">
+          <span>Powered by</span>
           <img 
             src={supersetLogo} 
             alt="Superset Logo" 
-            className="h-3 w-auto"
+            className="h-4 w-auto ml-1"
           />
         </div>
 
-        {/* Paused indicator */}
-        {isPaused && (
+        {/* Paused indicator - only for stream view */}
+        {isPaused && currentView === 'stream' && (
           <div className="fixed top-6 left-0 right-0 text-gray-400 text-2xl font-normal text-center">
             Paused
           </div>
         )}
 
-        {/* Daily Revenue Tally */}
-        <div 
-          className={`fixed bottom-6 left-6 font-normal transition-colors duration-300 ${
-            revenueChangeType === 'increase' 
-              ? 'text-green-700' 
-              : revenueChangeType === 'decrease' 
-                ? 'text-red-600' 
-                : 'text-gray-400'
-          }`}
-        >
-          <div className="text-sm">Revenue today</div>
-          <div className="text-2xl">{formatCurrency(dailyRevenue, 'USD')}</div>
-        </div>
+        {/* Revenue Today - Bottom Left */}
+        <Revenue 
+          dailyRevenue={dailyRevenue}
+          revenueChangeType={revenueChangeType}
+          currentView={currentView}
+        />
       </div>
     </div>
   );

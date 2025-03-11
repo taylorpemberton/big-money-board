@@ -1,0 +1,75 @@
+<svg width="800" height="400" viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="800" height="400" fill="#1f2937" />
+  
+  <!-- Dot pattern -->
+  <g fill="#374151" fill-opacity="0.5">
+    <!-- North America -->
+    <circle cx="150" cy="120" r="1.5" />
+    <circle cx="170" cy="130" r="1.5" />
+    <circle cx="190" cy="140" r="1.5" />
+    <circle cx="160" cy="150" r="1.5" />
+    <circle cx="180" cy="160" r="1.5" />
+    <circle cx="200" cy="170" r="1.5" />
+    <circle cx="170" cy="180" r="1.5" />
+    <circle cx="190" cy="190" r="1.5" />
+    <circle cx="210" cy="200" r="1.5" />
+    
+    <!-- South America -->
+    <circle cx="230" cy="250" r="1.5" />
+    <circle cx="240" cy="270" r="1.5" />
+    <circle cx="250" cy="290" r="1.5" />
+    <circle cx="260" cy="310" r="1.5" />
+    <circle cx="270" cy="330" r="1.5" />
+    
+    <!-- Europe -->
+    <circle cx="400" cy="120" r="1.5" />
+    <circle cx="410" cy="130" r="1.5" />
+    <circle cx="420" cy="140" r="1.5" />
+    <circle cx="430" cy="150" r="1.5" />
+    <circle cx="440" cy="160" r="1.5" />
+    
+    <!-- Africa -->
+    <circle cx="420" cy="200" r="1.5" />
+    <circle cx="430" cy="220" r="1.5" />
+    <circle cx="440" cy="240" r="1.5" />
+    <circle cx="450" cy="260" r="1.5" />
+    <circle cx="460" cy="280" r="1.5" />
+    
+    <!-- Asia -->
+    <circle cx="500" cy="120" r="1.5" />
+    <circle cx="520" cy="130" r="1.5" />
+    <circle cx="540" cy="140" r="1.5" />
+    <circle cx="560" cy="150" r="1.5" />
+    <circle cx="580" cy="160" r="1.5" />
+    <circle cx="600" cy="170" r="1.5" />
+    <circle cx="620" cy="180" r="1.5" />
+    <circle cx="640" cy="190" r="1.5" />
+    
+    <!-- Australia -->
+    <circle cx="650" cy="300" r="1.5" />
+    <circle cx="660" cy="310" r="1.5" />
+    <circle cx="670" cy="320" r="1.5" />
+  </g>
+  
+  <!-- Continent outlines (simplified) -->
+  <g stroke="#4b5563" stroke-width="1" fill="none">
+    <!-- North America -->
+    <path d="M100,100 C150,80 200,90 220,150 C240,210 200,250 150,230 C100,210 80,150 100,100 Z" />
+    
+    <!-- South America -->
+    <path d="M220,230 C240,250 260,280 250,320 C240,360 210,370 190,340 C170,310 200,260 220,230 Z" />
+    
+    <!-- Europe -->
+    <path d="M380,100 C420,80 460,90 470,120 C480,150 460,180 420,170 C380,160 360,120 380,100 Z" />
+    
+    <!-- Africa -->
+    <path d="M400,180 C450,170 480,200 470,250 C460,300 420,320 380,290 C340,260 350,190 400,180 Z" />
+    
+    <!-- Asia -->
+    <path d="M470,100 C550,70 650,100 670,150 C690,200 650,250 580,230 C510,210 480,150 470,100 Z" />
+    
+    <!-- Australia -->
+    <path d="M630,280 C660,270 690,290 700,320 C710,350 690,370 660,360 C630,350 610,310 630,280 Z" />
+  </g>
+</svg> 

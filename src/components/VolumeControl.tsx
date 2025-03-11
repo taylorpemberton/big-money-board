@@ -6,71 +6,64 @@ interface VolumeControlProps {
   onVolumeChange: (volume: number) => void;
   isMuted: boolean;
   onMuteChange: (isMuted: boolean) => void;
-  isSydneyMuted: boolean;
-  onSydneyMuteChange: (isSydneyMuted: boolean) => void;
+  isSydneyMuted?: boolean;
+  onSydneyMuteChange?: (isSydneyMuted: boolean) => void;
 }
 
-export const VolumeControl: React.FC<VolumeControlProps> = ({
+export function VolumeControl({
   volume,
   onVolumeChange,
   isMuted,
   onMuteChange,
-  isSydneyMuted,
+  isSydneyMuted = false,
   onSydneyMuteChange
-}) => {
-  // Common button style class
-  const buttonClass = (isActive: boolean) => `w-8 h-8 flex items-center justify-center rounded-full ${
-    isActive ? 'bg-blue-100' : 'bg-gray-200'
-  }`;
-
+}: VolumeControlProps) {
   return (
-    <div className="absolute bottom-4 right-4 flex flex-col items-center z-10">
-      {/* Mute buttons stacked vertically */}
-      <div className="flex flex-col items-center gap-2 mb-2">
-        <button
+    <div className="flex flex-col items-center bg-white rounded-xl pb-3 border-gray-100" style={{ zIndex: 9999, position: 'relative' }}>
+      <div className="flex flex-col items-center gap-2 mb-3">
+        <button 
           onClick={() => onMuteChange(!isMuted)}
-          className={buttonClass(!isMuted)}
+          className={`flex items-center justify-center w-7 h-7 rounded-full ${
+            isMuted ? 'bg-gray-200 text-gray-500' : 'bg-blue-100 text-blue-500'
+          }`}
           aria-label={isMuted ? 'Unmute' : 'Mute'}
         >
           {isMuted ? (
-            <FaVolumeMute className="text-gray-500" />
+            <FaVolumeMute className="h-4 w-4" />
           ) : (
-            <FaVolumeUp className="text-blue-500" />
+            <FaVolumeUp className="h-4 w-4" />
           )}
         </button>
         
-        <button
-          onClick={() => onSydneyMuteChange(!isSydneyMuted)}
-          className={buttonClass(!isSydneyMuted)}
-          aria-label={isSydneyMuted ? 'Unmute Sydney' : 'Mute Sydney'}
-        >
-          <span className={`font-medium text-md ${isSydneyMuted ? 'text-gray-500' : 'text-blue-500'}`}>
-            🦑
-          </span>
-        </button>
+        {onSydneyMuteChange && (
+          <button
+            onClick={() => onSydneyMuteChange(!isSydneyMuted)}
+            className={`flex items-center justify-center w-7 h-7 rounded-full ${
+              isSydneyMuted ? 'bg-gray-200 text-gray-500' : 'bg-blue-100 text-blue-500'
+            }`}
+            aria-label={isSydneyMuted ? 'Unmute Sydney' : 'Mute Sydney'}
+          >
+            <span className="text-lg">🦑</span>
+          </button>
+        )}
       </div>
       
-      {/* Vertical volume slider with labels */}
-      <div className="flex flex-col items-center">
-        <div className="text-xs text-gray-500">100%</div>
-        <div className="h-24 flex items-center justify-center mx-2">
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={volume}
-            onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-            className="h-24 w-2 bg-gray-300 rounded-lg appearance-none cursor-pointer"
-            style={{
-              WebkitAppearance: 'slider-vertical',
-              writingMode: 'vertical-rl',
-              transform: 'rotate(180deg)'
-            }}
-          />
-        </div>
-        <div className="text-xs text-gray-500">0%</div>
+      <div className="h-24 flex items-center justify-center">
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value={volume}
+          onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
+          className="h-24 w-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+          style={{
+            WebkitAppearance: 'slider-vertical',
+            writingMode: 'vertical-rl',
+            transform: 'rotate(180deg)'
+          }}
+        />
       </div>
     </div>
   );
-}; 
+} 
